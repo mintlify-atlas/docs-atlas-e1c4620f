@@ -90,18 +90,24 @@ The PIN Config page shows a list of all your API keys as selector buttons. Click
 [
   {
     "icon": "key",
-    "color": "#10b981",
-    "title": "Your personal key",
-    "description": "Each device gets a unique PIN tied to your Android ID."
+    "text": "Automatic Password System",
+    "color": "#8b5cf6"
   },
   {
     "icon": "shield-x",
-    "color": "#ef4444",
-    "title": "Cannot be shared",
-    "description": "Your PIN only works on the device it was generated for."
+    "text": "VPN & Emulators Not Allowed",
+    "color": "#ef4444"
   }
 ]
 ```
+
+Each item has three fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `icon` | `string` | Icon identifier. See supported values below. |
+| `text` | `string` | Display text for this info row. |
+| `color` | `string` | Hex color string for the icon dot (e.g. `#3b82f6`). If `null`, the default color for the icon type is used. |
 
 ### Supported icon values
 
@@ -115,14 +121,31 @@ The PIN Config page shows a list of all your API keys as selector buttons. Click
 
 ## joinLinks format
 
-`joinLinks` is a JSON array. Each element contains a label and a URL:
+`joinLinks` is a JSON array. Each element contains four fields:
 
 ```json
 [
-  { "label": "Join Telegram", "url": "https://t.me/yourchannel" },
-  { "label": "Visit Website", "url": "https://example.com" }
+  {
+    "name": "Public Channel",
+    "description": "Apps, APKs & Mods",
+    "url": "https://t.me/Android_apps_apks_mod",
+    "iconType": "channel"
+  },
+  {
+    "name": "Private Channel",
+    "description": "Exclusive Content",
+    "url": "https://t.me/+example",
+    "iconType": "telegram"
+  }
 ]
 ```
+
+| Field | Type | Description |
+|---|---|---|
+| `name` | `string` | Display name shown as the link title. |
+| `description` | `string` | Short subtitle shown below the name. |
+| `url` | `string` | URL opened when the user taps the link. |
+| `iconType` | `string` | Icon to display. One of: `telegram`, `channel`. |
 
 ## Saving configuration
 

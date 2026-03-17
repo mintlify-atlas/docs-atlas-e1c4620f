@@ -1,0 +1,79 @@
+---
+title: "POST /api/sdk/generate-pin"
+description: "Generate a PIN for a device — called by the shortener backend after the user completes the ad flow"
+---
+
+Generates and stores a unique 6-digit PIN for a device. This endpoint is **not** called by the Android SDK directly. It is called by the shortener backend service after a user has completed the required ad pages at the verification URL. The generated PIN is then displayed to the user, who enters it into the SDK's PIN dialog.
+
+## Authentication
+
+This endpoint does **not** use the `x-api-key` header. Instead, it requires a `Bearer` token matching the `SHORTENER_SECRET` environment variable on the server.
+
+<Warning>
+  This endpoint is intended for server-to-server calls only. Exposing `SHORTENER_SECRET` to clients allows anyone to generate PINs for any device, bypassing the verification flow entirely.
+</Warning>
+
+## Request
+
+### Headers
+
+<ParamField header="Authorization" type="string" required>
+  Must be `Bearer <SHORTENER_SECRET>`. The value of `<SHORTENER_SECRET>` is set via the server's environment variable.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`.
+</ParamField>
+
+### Body
+
+<ParamField body="apiKey" type="string" required>
+  The API key that identifies which app this PIN belongs to. Must correspond to an active API key in the database.
+</ParamField>
+
+<ParamField body="deviceId" type="string" required>
+  The Android ID of the device that will receive the PIN.
+</ParamField>
+
+## Response
+
+<ResponseField name="pin" type="string">
+  The 6-digit PIN generated for the device (e.g. `"482917"`). If an unused PIN already exists for this `apiKey` + `deviceId` combination, the existing PIN is returned instead of generating a new one.
+</ResponseField>
+
+<ResponseField name="deviceId" type="string">
+  The device ID echoed back from the request body.
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://your-server.com/api/sdk/generate-pin \
+  -H "Authorization: Bearer your-shortener-secret" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiKey": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+    "deviceId": "a1b2c3d4e5f6"
+  }'
+```
+
+## Example Response
+
+```json
+{
+  "pin": "482917",
+  "deviceId": "a1b2c3d4e5f6"
+}
+```
+
+## Error Responses
+
+| HTTP Status | Body | Reason |
+|------------|------|--------|
+| `401` | `{ "error": "Unauthorized" }` | Missing or incorrect `Authorization` header |
+| `400` | `{ "error": "apiKey and deviceId are required" }` | One or both required body fields is missing |
+| `403` | `{ "error": "Invalid API key" }` | The provided `apiKey` does not exist or is inactive |
+
+<Note>
+  PINs are generated using `crypto.randomInt(100000, 999999)` — always 6 digits. The PIN is stored in the `UserPin` table with `isUsed: false` until the device submits it to `/api/sdk/verify-pin`.
+</Note>

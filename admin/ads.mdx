@@ -58,9 +58,9 @@ Ads are the primary content delivered by the SDK. Each ad belongs to one API key
 
 When the SDK requests an ad, the server selects the **active ad with the highest `priority` value** for the calling app. Ads with equal priority are ordered by creation time.
 
-- Set `priority` to `1`–`10` in the creation form (the panel enforces this range).
-- A value of `0` is allowed via the API and will lose to any ad with a higher value.
-- Use higher priority for time-sensitive promotions and lower priority for evergreen ads.
+- Set higher values for time-sensitive or important promotions.
+- A value of `0` (the default) means the ad loses to any ad with a positive priority.
+- Use lower priority for evergreen ads that should only serve when no higher-priority ads exist.
 
 <Tip>
 Set the priority of an ad to `0` rather than disabling it when you want it to remain in rotation but not take precedence over others.

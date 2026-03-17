@@ -156,11 +156,11 @@ SDK calls /api/sdk/init with deviceId
     **Failure (`verified: false`):**
     - The dialog calls `showError("Invalid PIN. Try again.")`
     - The attempt counter increments inside the dialog
-    - When the attempt count reaches `maxAttempts`, the `PinVerifyDialog.PinListener.onMaxAttemptsReached()` callback fires, which in turn calls `AdVerifyCallback.onError("Max PIN attempts reached")`
+    - When the attempt count reaches `maxAttempts`, the dialog is **dismissed automatically**, then `PinVerifyDialog.PinListener.onMaxAttemptsReached()` fires, which in turn calls `AdVerifyCallback.onError("Max PIN attempts reached")`
 
-    <Warning>
-      Once `maxAttempts` is exhausted the error callback fires but the dialog does not close automatically — handle this in your `AdVerifyCallback.onError()` implementation if you need to take action (e.g. finish the activity).
-    </Warning>
+    <Note>
+      When `maxAttempts` is exhausted the dialog dismisses itself before the error callback fires. Your `AdVerifyCallback.onError()` receives `"Max PIN attempts reached"` with the dialog already gone.
+    </Note>
   </Step>
 
   <Step title="Ad Serving">
@@ -196,5 +196,5 @@ SDK calls /api/sdk/init with deviceId
 | No ads available | `AdVerifyCallback.onError("No ads available")` |
 
 <Note>
-  All HTTP calls in the SDK run on a background thread. Callbacks that touch the UI (`showError`, `dismiss`, etc.) are posted back to the main thread via `Activity.runOnUiThread()`.
+  All HTTP calls in the SDK run on a background thread via a single-threaded `ExecutorService`. Callbacks are posted back to the main thread via `Handler(Looper.getMainLooper())` in `AdClient`, so you can update UI directly inside any callback.
 </Note>

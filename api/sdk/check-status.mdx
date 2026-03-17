@@ -1,0 +1,63 @@
+---
+title: "POST /api/sdk/check-status"
+description: "Check whether a device is currently unlocked without triggering the full init flow"
+---
+
+Returns whether a device has a currently active (non-expired) PIN verification. Unlike `/api/sdk/init`, this endpoint does not return PIN configuration, UI strings, or ad data — it is a lightweight status check only.
+
+## Authentication
+
+This endpoint requires a valid API key passed in the `x-api-key` header.
+
+## Request
+
+### Headers
+
+<ParamField header="x-api-key" type="string" required>
+  Your application's API key.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`.
+</ParamField>
+
+### Body
+
+<ParamField body="deviceId" type="string" required>
+  The Android ID of the device to check.
+</ParamField>
+
+## Response
+
+<ResponseField name="unlocked" type="boolean">
+  `true` if the device has a valid, non-expired verified PIN. `false` if the device has no PIN record, has an expired PIN, or if `deviceId` is empty.
+</ResponseField>
+
+<Note>
+  The `unlocked` value respects the server's global `pinUnlockMode` setting. In `global` mode a device verified on any app returns `true`. In `per_app` mode only PINs issued by this API key are considered. Expired PINs are lazily deleted during this check.
+</Note>
+
+## Example Request
+
+```bash
+curl -X POST https://your-server.com/api/sdk/check-status \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId": "a1b2c3d4e5f6"}'
+```
+
+## Example Response — Device Verified
+
+```json
+{
+  "unlocked": true
+}
+```
+
+## Example Response — Device Not Verified
+
+```json
+{
+  "unlocked": false
+}
+```

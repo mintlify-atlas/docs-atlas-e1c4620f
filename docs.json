@@ -83,7 +83,9 @@
               "api/sdk/create-link",
               "api/sdk/ads",
               "api/sdk/impression",
-              "api/sdk/click"
+              "api/sdk/click",
+              "api/sdk/generate-pin",
+              "api/sdk/check-status"
             ]
           },
           {
