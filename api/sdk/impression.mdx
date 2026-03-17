@@ -1,0 +1,55 @@
+---
+title: "POST /api/sdk/impression"
+description: "Record that an ad was shown to a device"
+---
+
+Creates an impression record for the specified ad. Call this endpoint each time an ad is displayed to the user so that view counts are tracked correctly in the dashboard.
+
+## Authentication
+
+This endpoint requires a valid API key passed in the `x-api-key` header.
+
+## Request
+
+### Headers
+
+<ParamField header="x-api-key" type="string" required>
+  Your application's API key.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`.
+</ParamField>
+
+### Body
+
+<ParamField body="adId" type="number" required>
+  The numeric ID of the ad that was shown, as returned by `GET /api/sdk/ads`.
+</ParamField>
+
+<ParamField body="deviceId" type="string">
+  The unique identifier for the device. Optional but recommended for accurate per-device analytics.
+</ParamField>
+
+## Response
+
+<ResponseField name="status" type="string">
+  Returns `"ok"` when the impression has been recorded successfully.
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X POST https://your-server.com/api/sdk/impression \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"adId": 7, "deviceId": "a1b2c3d4e5f6"}'
+```
+
+## Example Response
+
+```json
+{
+  "status": "ok"
+}
+```

@@ -1,0 +1,89 @@
+---
+title: "GET /api/sdk/ads"
+description: "Fetch the list of active ads for the app"
+---
+
+Returns all active ads associated with the API key, ordered by `priority` descending. The SDK uses this list to display interstitial or other ad formats to the user.
+
+## Authentication
+
+This endpoint requires a valid API key passed in the `x-api-key` header.
+
+## Request
+
+### Headers
+
+<ParamField header="x-api-key" type="string" required>
+  Your application's API key.
+</ParamField>
+
+This endpoint has no request body.
+
+## Response
+
+<ResponseField name="ads" type="array">
+  Array of ad objects. Only ads with `isActive: true` are returned.
+
+  <Expandable title="ad properties">
+    <ResponseField name="id" type="number">
+      Unique identifier for the ad.
+    </ResponseField>
+    <ResponseField name="title" type="string">
+      Display title of the ad.
+    </ResponseField>
+    <ResponseField name="description" type="string">
+      Supporting description text. May be an empty string.
+    </ResponseField>
+    <ResponseField name="imageUrl" type="string">
+      URL of the ad's image asset. May be an empty string if no image is set.
+    </ResponseField>
+    <ResponseField name="redirectUrl" type="string">
+      The destination URL opened when the user interacts with the ad.
+    </ResponseField>
+    <ResponseField name="adType" type="string">
+      The format of the ad. Defaults to `interstitial`.
+    </ResponseField>
+    <ResponseField name="buttonText" type="string">
+      Label for the ad's call-to-action button. Defaults to `Visit Now`.
+    </ResponseField>
+    <ResponseField name="priority" type="number">
+      Sort weight. Higher values appear first in the list.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Example Request
+
+```bash
+curl -X GET https://your-server.com/api/sdk/ads \
+  -H "x-api-key: YOUR_API_KEY"
+```
+
+## Example Response
+
+```json
+{
+  "ads": [
+    {
+      "id": 7,
+      "title": "Try Premium",
+      "description": "Unlock all features for free",
+      "imageUrl": "https://cdn.example.com/ads/premium.png",
+      "redirectUrl": "https://example.com/premium",
+      "adType": "interstitial",
+      "buttonText": "Visit Now",
+      "priority": 10
+    },
+    {
+      "id": 3,
+      "title": "Join Our Channel",
+      "description": "",
+      "imageUrl": "",
+      "redirectUrl": "https://t.me/example",
+      "adType": "interstitial",
+      "buttonText": "Join Now",
+      "priority": 5
+    }
+  ]
+}
+```

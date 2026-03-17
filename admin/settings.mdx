@@ -1,0 +1,88 @@
+---
+title: "Settings"
+description: "Configure the global PIN unlock mode to control whether a verified PIN on one app unlocks all apps for the same device."
+---
+
+The Settings page manages the single `GlobalSettings` record that controls cross-app PIN verification behavior. Changes apply to all future `/api/sdk/init` calls immediately after saving.
+
+## PIN unlock mode
+
+The `pinUnlockMode` field has three options:
+
+<Tabs>
+  <Tab title="Per app">
+    **Value:** `per_app`
+
+    Each app requires its own independent PIN. A device that has verified on App A still needs a separate PIN for App B.
+
+    This is the default and most isolated mode. Use it when your apps serve different audiences or you want to enforce distinct verification per property.
+
+    ```json
+    { "pinUnlockMode": "per_app", "excludedAppIds": [] }
+    ```
+  </Tab>
+  <Tab title="Global unlock">
+    **Value:** `global`
+
+    One verified PIN unlocks all apps for that device. If a device has a valid PIN for any app, every other app skips PIN verification and proceeds directly to ad serving.
+
+    Use this mode when all your apps share the same user base and you want the lowest friction experience. Users verify once and never see the PIN dialog again (until the PIN expires, if expiry is enabled).
+
+    ```json
+    { "pinUnlockMode": "global", "excludedAppIds": [] }
+    ```
+
+    <Note>
+    When `global` is active, `excludedAppIds` is ignored. Switching to `global_except` re-enables the exclusion list.
+    </Note>
+  </Tab>
+  <Tab title="Global with exclusions">
+    **Value:** `global_except`
+
+    Same as `global`, but specific apps are excluded from the shared verification. Excluded apps always require their own independent PIN regardless of the device's global status.
+
+    ```json
+    {
+      "pinUnlockMode": "global_except",
+      "excludedAppIds": [3, 7]
+    }
+    ```
+
+    Use this mode when most of your apps share a user base but one or two apps require stricter access control.
+  </Tab>
+</Tabs>
+
+## Excluded app IDs
+
+The `excludedAppIds` field is an array of `ApiKey` IDs (integer primary keys, not key strings). It is only evaluated when `pinUnlockMode` is `global_except`.
+
+To manage exclusions in the panel:
+
+1. Select **Global with Exclusions** as the unlock mode.
+2. A list of all your apps appears below the mode selector.
+3. Toggle the apps that should require their **own PIN** (shown in red as **Own PIN**).
+4. Apps left untoggledstay in global mode (shown in green as **Global**).
+5. Click **Save Settings**.
+
+<Tip>
+If you switch from `global_except` to `global` or `per_app`, the panel clears `excludedAppIds` automatically. Switching back to `global_except` starts with an empty exclusion list.
+</Tip>
+
+## GlobalSettings fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Int` | Always `1` — there is exactly one settings record |
+| `pinUnlockMode` | `String` | `"per_app"`, `"global"`, or `"global_except"` |
+| `excludedAppIds` | `Int[]` | Array of `ApiKey.id` values excluded from global unlock |
+| `updatedAt` | `DateTime` | Timestamp of the last save |
+
+## When to use each mode
+
+| Scenario | Recommended mode |
+|---|---|
+| Apps serve unrelated audiences | `per_app` |
+| All apps share the same users | `global` |
+| Most apps share users, but 1–2 need separate PINs | `global_except` |
+| You want maximum security per app | `per_app` |
+| You want minimum user friction | `global` |

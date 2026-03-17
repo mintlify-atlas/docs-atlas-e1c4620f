@@ -1,80 +1,168 @@
 ---
 title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+description: "Integrate the AdVerify SDK into your Android app in minutes."
 ---
 
-## Get started in three steps
+<Steps>
 
-Get your documentation site running locally and make your first customization.
+<Step title="Prerequisites">
 
-### Step 1: Set up your local environment
+Before you begin, make sure you have:
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+- An Android project targeting **API 21 (Android 5.0)** or higher
+- A running AdVerify server (Express.js) with a reachable base URL
+- An **API key** generated from the admin panel under **Keys**
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  The SDK uses `Settings.Secure.ANDROID_ID` as the device identifier. No additional permissions are required beyond `INTERNET`.
 </Note>
+
+</Step>
+
+<Step title="Add the SDK to your project">
+
+The SDK is distributed as an **AAR** (Android Studio) or a **DEX file** (MT Manager / smali injection).
+
+**Android Studio — AAR**
+
+Copy `adverify.aar` into your module's `libs/` folder, then add it as a file dependency in `build.gradle`:
+
+```groovy
+dependencies {
+    implementation files('libs/adverify.aar')
+}
+```
+
+**MT Manager — DEX**
+
+Place the DEX file in the target APK and use smali injection. See the **MT Manager** page in the admin panel for step-by-step smali instructions.
+
+</Step>
+
+<Step title="Add your API key and server URL">
+
+You can supply credentials either through `AndroidManifest.xml` meta-data (recommended for MT Manager) or by calling `AdVerify.init()` directly in code.
+
+**Option A — AndroidManifest.xml meta-data**
+
+```xml
+<application ...>
+
+    <meta-data
+        android:name="adverify.api_key"
+        android:value="YOUR_API_KEY" />
+
+    <meta-data
+        android:name="adverify.base_url"
+        android:value="https://your-server.com" />
+
+</application>
+```
+
+With meta-data in place, call the single-method entry point from your launcher `Activity`:
+
+```java
+// Reads meta-data automatically — no Application class needed
+AdVerify.start(this);
+```
+
+**Option B — Explicit `init()` call**
+
+Call `init()` once, typically in `Application.onCreate()`, then call `show()` from any `Activity`:
+
+```java
+// In your Application class
+@Override
+public void onCreate() {
+    super.onCreate();
+    AdVerify.init(this, "YOUR_API_KEY", "https://your-server.com");
+}
+```
+
+<Warning>
+  Both `apiKey` and `baseUrl` must be non-null and non-empty. Passing an empty string will throw an `IllegalArgumentException`.
+</Warning>
+
+</Step>
+
+<Step title="Show the ad or PIN dialog">
+
+Call `AdVerify.show()` from the `Activity` where you want the dialog to appear. Pass an optional `AdVerifyCallback` to react to lifecycle events.
+
+```java
+import com.adverify.sdk.AdVerify;
+import com.adverify.sdk.AdVerifyCallback;
+
+public class MainActivity extends AppCompatActivity {
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        AdVerify.show(this, new AdVerifyCallback() {
+            @Override
+            public void onAdShown() {
+                // Ad dialog is now visible
+            }
+
+            @Override
+            public void onAdClosed() {
+                // User dismissed the ad
+            }
+
+            @Override
+            public void onAdClicked(String redirectUrl) {
+                // User tapped the ad CTA button
+            }
+
+            @Override
+            public void onError(String message) {
+                // Network error or no ads available
+                Log.e("AdVerify", "Error: " + message);
+            }
+        });
+    }
+}
+```
+
+If you don't need lifecycle callbacks, use the no-callback overload:
+
+```java
+AdVerify.show(this);
+```
+
+<Info>
+  `show()` will throw `IllegalStateException` if called before `init()`. Always ensure `init()` completes first.
+</Info>
+
+</Step>
+
+<Step title="Verify the integration">
+
+Run your app. Depending on your server's PIN configuration, you will see one of two dialogs:
+
+| Condition | What appears |
+|-----------|-------------|
+| `pinEnabled=false` or device already verified | **Ad dialog** — image, title, description, and a CTA button |
+| `pinEnabled=true` and device not yet verified | **PIN verification dialog** — shield icon, info card, Generate/Tutorial/Join/Exit buttons |
+
+To confirm the server is receiving requests, check your server logs for `POST /api/sdk/init`. A successful response looks like:
+
+```json
+{
+  "appName": "MyApp",
+  "pinEnabled": true,
+  "pinVerified": false,
+  "pinMessage": "Verify your device to continue",
+  "maxAttempts": 5,
+  "getPinBtnText": "Generate PIN & Verify"
+}
+```
+
+<Tip>
+  If no dialog appears and `onError` fires, verify that the `x-api-key` header value matches the key in your admin panel and that your server URL does not have a trailing slash.
+</Tip>
+
+</Step>
+
+</Steps>

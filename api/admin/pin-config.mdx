@@ -1,0 +1,201 @@
+---
+title: "Admin: PIN configuration"
+description: "View and update PIN unlock configuration for each API key."
+---
+
+Each API key has exactly one `PinConfig` record (created automatically alongside the key). PIN configuration controls whether the PIN unlock flow is enabled, the UI text shown to users, how many attempts are allowed, and when PINs expire.
+
+<Note>
+All admin endpoints require HTTP Basic authentication.
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/pin-config
+```
+</Note>
+
+---
+
+## GET /api/admin/pin-config
+
+Returns all PIN configuration records across all API keys.
+
+### Response fields
+
+Returns an array of `PinConfig` objects.
+
+<ResponseField name="id" type="number">
+  Auto-incremented primary key.
+</ResponseField>
+
+<ResponseField name="apiKeyId" type="number">
+  ID of the API key this config belongs to. One-to-one relationship.
+</ResponseField>
+
+<ResponseField name="pinEnabled" type="boolean">
+  Whether the PIN unlock flow is active for devices using this API key. Defaults to `false`.
+</ResponseField>
+
+<ResponseField name="pinMessage" type="string">
+  Message displayed on the PIN entry screen. Defaults to `"Enter PIN to unlock"`.
+</ResponseField>
+
+<ResponseField name="maxAttempts" type="number">
+  Maximum number of incorrect PIN attempts allowed before the app locks. Defaults to `3`.
+</ResponseField>
+
+<ResponseField name="getPinUrl" type="string">
+  URL opened when the user taps the "get PIN" button (e.g. a Telegram channel link). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="getPinBtnText" type="string">
+  Label for the button that directs the user to obtain their PIN. Defaults to `"Get PIN"`.
+</ResponseField>
+
+<ResponseField name="enterPinBtnText" type="string">
+  Label for the button that opens the PIN entry dialog. Defaults to `"Enter PIN"`.
+</ResponseField>
+
+<ResponseField name="expiryMode" type="string">
+  Controls PIN expiration. `"never"` — PINs never expire. `"duration"` — PINs expire after `expiryHours` from when they were first used. Defaults to `"never"`.
+</ResponseField>
+
+<ResponseField name="expiryHours" type="number">
+  Hours until a used PIN expires. Only meaningful when `expiryMode` is `"duration"`. Defaults to `24`.
+</ResponseField>
+
+<ResponseField name="tutorialUrl" type="string">
+  URL to a tutorial shown to users who need help with the PIN process.
+</ResponseField>
+
+<ResponseField name="pinInfoItems" type="array">
+  JSON array of informational items displayed on the PIN screen. Defaults to `[]`.
+</ResponseField>
+
+<ResponseField name="joinLinks" type="array">
+  JSON array of join/channel links shown alongside PIN instructions. Defaults to `[]`.
+</ResponseField>
+
+### Example
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/pin-config
+```
+
+```json
+[
+  {
+    "id": 1,
+    "apiKeyId": 3,
+    "pinEnabled": true,
+    "pinMessage": "Enter your PIN to continue",
+    "maxAttempts": 5,
+    "getPinUrl": "https://t.me/myChannel",
+    "getPinBtnText": "Get PIN",
+    "enterPinBtnText": "Enter PIN",
+    "expiryMode": "duration",
+    "expiryHours": 48,
+    "tutorialUrl": "https://t.me/EllieTutorials/36",
+    "pinInfoItems": [],
+    "joinLinks": []
+  }
+]
+```
+
+---
+
+## POST /api/admin/pin-config
+
+Creates or updates the PIN configuration for a given API key (upsert). If no record exists for `apiKeyId`, one is created. If a record already exists, only the provided fields are updated.
+
+**Side effects when changing `expiryMode`:**
+- Switching to `"duration"`: any active PINs that currently have no expiry date will have `expiresAt` backfilled based on their original `usedAt` timestamp plus `expiryHours`.
+- Switching to `"never"`: `expiresAt` is cleared from all active PINs for this key.
+
+### Request body
+
+<ParamField body="apiKeyId" type="number" required>
+  ID of the API key to configure.
+</ParamField>
+
+<ParamField body="pinEnabled" type="boolean">
+  Enable or disable the PIN unlock flow.
+</ParamField>
+
+<ParamField body="pinMessage" type="string">
+  Message shown on the PIN entry screen.
+</ParamField>
+
+<ParamField body="maxAttempts" type="number">
+  Maximum incorrect attempts before lockout.
+</ParamField>
+
+<ParamField body="getPinUrl" type="string">
+  URL for the "get PIN" button.
+</ParamField>
+
+<ParamField body="getPinBtnText" type="string">
+  Label for the "get PIN" button.
+</ParamField>
+
+<ParamField body="enterPinBtnText" type="string">
+  Label for the "enter PIN" button.
+</ParamField>
+
+<ParamField body="expiryMode" type="string">
+  PIN expiry mode. One of `"never"` or `"duration"`.
+</ParamField>
+
+<ParamField body="expiryHours" type="number">
+  Hours until a PIN expires after first use. Required when setting `expiryMode` to `"duration"`.
+</ParamField>
+
+<ParamField body="tutorialUrl" type="string">
+  URL for the tutorial link shown to users.
+</ParamField>
+
+<ParamField body="pinInfoItems" type="array">
+  Array of informational items for the PIN screen.
+</ParamField>
+
+<ParamField body="joinLinks" type="array">
+  Array of channel/join links shown to users.
+</ParamField>
+
+### Response fields
+
+Returns the upserted `PinConfig` object. See [GET /api/admin/pin-config](#get-apiadminpin-config) for field descriptions.
+
+### Example
+
+```bash
+curl -u "admin:password" \
+  -X POST https://your-server.com/api/admin/pin-config \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiKeyId": 3,
+    "pinEnabled": true,
+    "pinMessage": "Enter your PIN to continue",
+    "maxAttempts": 5,
+    "getPinUrl": "https://t.me/myChannel",
+    "expiryMode": "duration",
+    "expiryHours": 48
+  }'
+```
+
+```json
+{
+  "id": 1,
+  "apiKeyId": 3,
+  "pinEnabled": true,
+  "pinMessage": "Enter your PIN to continue",
+  "maxAttempts": 5,
+  "getPinUrl": "https://t.me/myChannel",
+  "getPinBtnText": "Get PIN",
+  "enterPinBtnText": "Enter PIN",
+  "expiryMode": "duration",
+  "expiryHours": 48,
+  "tutorialUrl": "https://t.me/EllieTutorials/36",
+  "pinInfoItems": [],
+  "joinLinks": []
+}
+```

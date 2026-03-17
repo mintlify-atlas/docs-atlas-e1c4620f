@@ -1,0 +1,77 @@
+---
+title: "POST /api/sdk/verify-pin"
+description: "Verify a PIN for a device and unlock app access"
+---
+
+Verifies a PIN entered by the user against the device's assigned PIN record. On success the PIN is marked as used and an expiry timestamp is recorded (if the app is configured with a duration-based expiry). Subsequent calls to `/api/sdk/init` will return `pinVerified: true` until the PIN expires.
+
+## Authentication
+
+This endpoint requires a valid API key passed in the `x-api-key` header.
+
+## Request
+
+### Headers
+
+<ParamField header="x-api-key" type="string" required>
+  Your application's API key.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`.
+</ParamField>
+
+### Body
+
+<ParamField body="pin" type="string" required>
+  The 6-digit PIN entered by the user.
+</ParamField>
+
+<ParamField body="deviceId" type="string" required>
+  The unique identifier for the device. Must match the `deviceId` that was used when the PIN was generated.
+</ParamField>
+
+## Response
+
+<ResponseField name="verified" type="boolean">
+  `true` if the PIN was accepted or the device was already verified. `false` if the PIN is invalid.
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  A human-readable message describing the outcome. Examples: `PIN verified. App unlocked!`, `Invalid PIN`, `Already verified`, `PIN not required`.
+</ResponseField>
+
+<Note>
+  If PIN verification is disabled for the app (`pinEnabled: false`), the endpoint returns `{ verified: true, message: "PIN not required" }` without checking any PIN records.
+</Note>
+
+<Warning>
+  Each PIN is single-use and bound to a specific `deviceId`. Submitting a PIN that belongs to a different device will return `verified: false`.
+</Warning>
+
+## Example Request
+
+```bash
+curl -X POST https://your-server.com/api/sdk/verify-pin \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"pin": "483920", "deviceId": "a1b2c3d4e5f6"}'
+```
+
+## Example Response — Success
+
+```json
+{
+  "verified": true,
+  "message": "PIN verified. App unlocked!"
+}
+```
+
+## Example Response — Invalid PIN
+
+```json
+{
+  "verified": false,
+  "message": "Invalid PIN"
+}
+```

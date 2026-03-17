@@ -1,0 +1,79 @@
+---
+title: "Server Overview"
+description: "The AdVerify Express.js API that powers the Android SDK, ad serving, PIN verification, and the admin dashboard."
+---
+
+The AdVerify server is a TypeScript/Express.js REST API that sits between your Android apps and your PostgreSQL database. It handles everything the SDK needs — initialization, ad delivery, PIN generation and verification, and impression/click tracking — while also exposing a full admin API consumed by the dashboard.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Runtime | Node.js (>=20) |
+| Framework | Express.js 4 |
+| Language | TypeScript 5 |
+| ORM | Prisma 6 |
+| Database | PostgreSQL |
+| Validation | Zod 3 |
+| File uploads | Multer |
+
+## Route groups
+
+<CardGroup cols={2}>
+  <Card title="/api/sdk/*" icon="mobile">
+    Endpoints called directly by the Android SDK. Authenticated with an `x-api-key` header. Covers app init, ad fetching, PIN verification, status checks, link creation, and impression/click tracking.
+  </Card>
+  <Card title="/api/admin/*" icon="shield">
+    Endpoints consumed by the admin dashboard. Protected with HTTP Basic auth (`ADMIN_USERNAME` / `ADMIN_PASSWORD`). Manages API keys, ads, PIN configs, user PINs, and global settings.
+  </Card>
+  <Card title="/api/health" icon="heart-pulse">
+    Public health-check endpoint. Returns server uptime and a UTC timestamp. Used by load balancers and monitoring tools.
+  </Card>
+  <Card title="/api/admin/patch/*" icon="wrench">
+    APK patcher endpoints, also behind admin auth. Accepts an APK upload (up to 500 MB), patches it, and serves the patched file for download.
+  </Card>
+</CardGroup>
+
+## Authentication model
+
+### SDK routes — `x-api-key`
+
+Every request to `/api/sdk/*` (except `POST /api/sdk/generate-pin`) must include the app's API key in the `x-api-key` request header. The middleware looks up the key in the database and attaches the resolved `ApiKey` record to `req.apiKeyData`.
+
+```http
+POST /api/sdk/init HTTP/1.1
+x-api-key: <your-api-key>
+Content-Type: application/json
+
+{ "deviceId": "abc123" }
+```
+
+<Note>
+`POST /api/sdk/generate-pin` is a public endpoint called by the link-shortener backend, not the SDK. It uses a separate `Authorization: Bearer <SHORTENER_SECRET>` header.
+</Note>
+
+### Admin routes — HTTP Basic auth
+
+All `/api/admin/*` endpoints require a valid `Authorization: Basic <base64(username:password)>` header. Credentials are compared against `ADMIN_USERNAME` and `ADMIN_PASSWORD` from environment variables.
+
+```http
+GET /api/admin/stats HTTP/1.1
+Authorization: Basic YWRtaW46YWRtaW4xMjM=
+```
+
+## Request validation
+
+All write endpoints use a Zod-powered `validate()` middleware. Invalid request bodies return a `400` with a structured error array:
+
+```json
+{
+  "error": "Validation failed",
+  "details": [
+    { "code": "too_small", "path": ["appName"], "message": "String must contain at least 1 character(s)" }
+  ]
+}
+```
+
+## CORS
+
+The server allows requests from origins listed in `FRONTEND_URL` and `ALLOWED_ORIGINS`. Requests with no `Origin` header (mobile apps, curl, server-to-server calls) are always permitted.

@@ -1,0 +1,132 @@
+---
+title: "Dialogs"
+description: "Reference for the three dialog components rendered by the AdVerify SDK."
+---
+
+The SDK renders all UI programmatically using Android's `Canvas`, `Paint`, `Path`, and `GradientDrawable` APIs. There are no XML layouts, no image assets, and no external UI libraries. All dialogs share a light `#fafafa` background, solid `#111111` primary buttons, `RippleDrawable` press feedback, and a 200 ms fade+scale entrance animation (`AlphaAnimation` + `ScaleAnimation` with a `DecelerateInterpolator`).
+
+---
+
+## PinVerifyDialog
+
+Shown when the server returns `pinEnabled: true` and `pinVerified: false` for the current device. The dialog is **not cancellable** — the user must complete verification or tap **Exit** to close the app.
+
+### State 1 — Info State
+
+The default state that appears when the dialog opens.
+
+| Element | Description |
+|---------|-------------|
+| Shield icon | Canvas-drawn black shield with a white padlock and keyhole |
+| Title | App name from server (`appName`), fallback: `"Device Verification"` |
+| Subtitle | PIN message from server (`pinMessage`), fallback: `"Verify your device to continue"` |
+| Info card | White card with colored icon dots and text rows from `pinInfoItems` |
+| **Get PIN** button | Solid black, calls `/api/sdk/create-link`, opens URL, switches to PIN state. Text is configurable via `getPinBtnText`. |
+| **Enter PIN** button | Outlined white, immediately switches to PIN state. Text is configurable via `enterPinBtnText`, fallback: `"Enter PIN"`. |
+| **Tutorial** button | Ghost style, opens `tutorialUrl` in the browser. Fallback URL: `https://t.me/EllieTutorials/36`. |
+| **Join Us** button | Ghost style, opens `JoinDialog`. |
+| **Exit** button | Red pill outline, calls `activity.finish()`. |
+
+### State 2 — PIN Entry State
+
+Activated when the user taps **Get PIN** (after the browser link opens) or **Enter PIN**.
+
+| Element | Description |
+|---------|-------------|
+| Instruction text | `"Enter the PIN from your browser"` |
+| PIN input | Numeric-password input, monospace font, centered, white background with border |
+| Error text | Red (`#ee5555`), hidden until an error occurs |
+| Attempts counter | Shows `"N attempt(s) remaining"` after the first wrong PIN |
+| **Verify** button | Solid black, submits PIN to `/api/sdk/verify-pin` |
+| **← Back** button | Ghost style, returns to Info State |
+
+When `attempts >= maxAttempts`, the dialog is dismissed and `AdVerifyCallback.onError("Max PIN attempts reached")` is fired.
+
+### Info Card Icon Types
+
+Each row in the info card has a 30 dp square dot with a Canvas-drawn icon. The icon type is set by the `icon` field in each `pinInfoItem` from the server. Matching is case-insensitive and supports aliases:
+
+| `icon` value | Drawing | Dot background | Icon color |
+|-------------|---------|----------------|-----------|
+| `device` / `info` | Phone outline with signal wave | `#eef6ff` | Blue `#3b82f6` |
+| `clock` / `hourglass` | Hourglass with sand | `#eefbf4` | Green `#22c55e` |
+| `key` / `sparkle` | Key with sparkle star | `#f3f0ff` | Violet `#8b5cf6` |
+| `star` / `crown` | Crown with gems | `#fefce8` | Amber `#eab308` |
+| `warning` / `shield-x` | Shield with X mark | `#fef2f2` | Red `#ef4444` |
+| *(anything else)* | Filled circle | `#f5f5f5` | `#999999` |
+
+The first row also renders a blue `PENDING` badge in monospace font.
+
+### Fallback Info Items
+
+If the server returns no `pinInfoItems`, these defaults are used:
+
+```java
+new PinInfoItem("device",    "Device Not Registered",        "#3b82f6")
+new PinInfoItem("hourglass", "Access Duration: 24 Hours",    "#22c55e")
+new PinInfoItem("key",       "Automatic Password System",    "#8b5cf6")
+new PinInfoItem("crown",     "Premium Users Only",           "#eab308")
+new PinInfoItem("shield",    "VPN & Emulators Not Allowed",  "#ef4444")
+```
+
+---
+
+## AdDialog
+
+Shown after PIN verification passes (or immediately if PIN is not enabled). Cancellable — the user can dismiss by tapping outside the dialog.
+
+### Layout
+
+| Element | Description |
+|---------|-------------|
+| Background image | 160 dp tall, `CENTER_CROP` scale, loaded asynchronously via `HttpURLConnection` (5 s timeout) on a background thread, set on the UI thread via `runOnUiThread`. Hidden if `imageUrl` is empty. |
+| Title | Bold, 17 sp, `#111111` |
+| Description | 13 sp, `#888888`, 1.35× line height. Hidden if empty. |
+| Divider | 1 dp `#f2f2f2` |
+| **Close** button | Transparent background, `#999999` text, dismisses the dialog |
+| **CTA** button | Solid `#111111`, white bold text, configurable label (`ad.buttonText`). Tapping fires `onAdClicked`, tracks a click via `/api/sdk/click`, opens `redirectUrl` in the browser, and dismisses the dialog. |
+
+### Tracking
+
+- **Impression** — tracked via `/api/sdk/impression` when `showAd()` is called (before the dialog appears).
+- **Click** — tracked via `/api/sdk/click` when the user taps the CTA button.
+
+---
+
+## JoinDialog
+
+Opened from `PinVerifyDialog` when the user taps **Join Us**. Shows community links supplied by the server (`joinLinks`). Cancellable.
+
+### Layout
+
+| Element | Description |
+|---------|-------------|
+| Community icon | 44 dp circle, `#eef6ff` background, two people silhouettes drawn with `Canvas` strokes |
+| Title | `"Join Our Community"`, bold, 16 sp |
+| Subtitle | `"Get updates, mods & support"`, `#999999`, 12 sp |
+| Link cards | One card per `JoinLink`. Tapping opens `link.url` in the browser. |
+| **Close** button | Outlined white, dismisses the dialog |
+
+### Link Card Structure
+
+Each card contains:
+
+- **Icon** — 36 dp square, Canvas-drawn. Style is determined by `link.iconType`:
+
+  | `iconType` | Drawing | Background | Icon color |
+  |-----------|---------|------------|-----------|
+  | `telegram` | Paper plane outline | `#e8f4fd` | `#0088cc` |
+  | `channel` *(or any other value)* | Megaphone with sound wave | `#eef8ee` | `#22c55e` |
+
+- **Name** — bold, 13 sp, `#222222`
+- **Description** — 11 sp, `#999999` (hidden if empty)
+- **Arrow** (`›`) — `#cccccc`, decorative
+
+### Fallback Join Links
+
+If the server returns no `joinLinks`, these defaults are used:
+
+```java
+new JoinLink("Public Channel",  "Apps, APKs & Mods",  "https://t.me/Android_apps_apks_mod",  "channel")
+new JoinLink("Private Channel", "Exclusive Content",  "https://t.me/+PXcn1RVLom0xMzU1",      "telegram")
+```

@@ -1,0 +1,107 @@
+---
+title: "Admin: Dashboard stats"
+description: "Retrieve dashboard statistics and current admin identity."
+---
+
+The stats endpoints provide aggregate counters for impressions, clicks, API keys, ads, and PIN activity. Use these to populate an admin dashboard or monitor SDK usage at a glance.
+
+<Note>
+All admin endpoints require HTTP Basic authentication. Send the `Authorization` header with the value `Basic <base64(username:password)>` where `username` and `password` match the `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables set on the server.
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/stats
+```
+</Note>
+
+---
+
+## GET /api/admin/stats
+
+Returns aggregate counts across all API keys, ads, impressions, clicks, and PIN records. Includes both all-time totals and today-only breakdowns, plus a computed click-through rate.
+
+### Response fields
+
+<ResponseField name="totalKeys" type="number">
+  Total number of API keys in the database.
+</ResponseField>
+
+<ResponseField name="totalAds" type="number">
+  Total number of ad records.
+</ResponseField>
+
+<ResponseField name="totalImpressions" type="number">
+  All-time impression count across all ads and keys.
+</ResponseField>
+
+<ResponseField name="totalClicks" type="number">
+  All-time click count across all ads and keys.
+</ResponseField>
+
+<ResponseField name="todayImpressions" type="number">
+  Impression count for the current calendar day (server timezone, midnight reset).
+</ResponseField>
+
+<ResponseField name="todayClicks" type="number">
+  Click count for the current calendar day.
+</ResponseField>
+
+<ResponseField name="ctr" type="string">
+  Overall click-through rate as a percentage string (e.g. `"3.45"`). Calculated as `(totalClicks / totalImpressions) * 100`, fixed to two decimal places. Returns `"0.00"` when there are no impressions.
+</ResponseField>
+
+<ResponseField name="totalPins" type="number">
+  Total number of UserPin records ever generated.
+</ResponseField>
+
+<ResponseField name="usedPins" type="number">
+  Number of UserPin records where `isUsed` is `true`.
+</ResponseField>
+
+### Example
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/stats
+```
+
+```json
+{
+  "totalKeys": 4,
+  "totalAds": 12,
+  "totalImpressions": 48320,
+  "totalClicks": 1674,
+  "todayImpressions": 840,
+  "todayClicks": 31,
+  "ctr": "3.46",
+  "totalPins": 2100,
+  "usedPins": 1943
+}
+```
+
+---
+
+## GET /api/admin/me
+
+Verifies admin credentials and returns the authenticated admin username. Useful for checking whether a stored credential is still valid before making further requests.
+
+### Response fields
+
+<ResponseField name="authenticated" type="boolean">
+  Always `true` when credentials are accepted.
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  The value of the `ADMIN_USERNAME` environment variable.
+</ResponseField>
+
+### Example
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/me
+```
+
+```json
+{
+  "authenticated": true,
+  "username": "admin"
+}
+```

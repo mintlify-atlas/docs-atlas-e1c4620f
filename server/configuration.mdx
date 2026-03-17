@@ -1,0 +1,160 @@
+---
+title: "Configuration"
+description: "All environment variables used by the AdVerify server, with types, defaults, and examples."
+---
+
+The server loads environment variables via `dotenv` at startup and validates them with a Zod schema defined in `src/config/env.ts`. If a required variable is missing or fails type coercion, the process exits immediately with a validation error.
+
+Create a `.env` file in the `server/` directory and set the values below.
+
+## Database
+
+<ParamField path="DATABASE_URL" type="string" required>
+  PostgreSQL connection string used by Prisma. Must be a valid `postgresql://` URI.
+
+  ```env
+  DATABASE_URL="postgresql://user:password@localhost:5432/adverify"
+  ```
+</ParamField>
+
+## Server
+
+<ParamField path="PORT" type="number">
+  The port the Express server binds to.
+
+  Defaults to `3042` if not set.
+
+  ```env
+  PORT=3042
+  ```
+</ParamField>
+
+## Admin credentials
+
+Admin routes use HTTP Basic authentication. The server compares the decoded `Authorization` header against `ADMIN_USERNAME` and `ADMIN_PASSWORD` directly — there is no JWT or session involved.
+
+<ParamField path="ADMIN_USERNAME" type="string">
+  Username for the admin dashboard.
+
+  Defaults to `admin`.
+
+  ```env
+  ADMIN_USERNAME="admin"
+  ```
+</ParamField>
+
+<ParamField path="ADMIN_PASSWORD" type="string">
+  Password for the admin dashboard.
+
+  Defaults to `admin123`.
+
+  <Warning>
+    The default password is intentionally weak. Always override this with a strong, unique value before deploying to any non-local environment.
+  </Warning>
+
+  ```env
+  ADMIN_PASSWORD="s0me-str0ng-p@ssword"
+  ```
+</ParamField>
+
+## CORS
+
+<ParamField path="FRONTEND_URL" type="string">
+  The primary origin allowed by the CORS policy — typically your admin dashboard URL.
+
+  Defaults to `http://localhost:3000`.
+
+  ```env
+  FRONTEND_URL="https://admin.yourdomain.com"
+  ```
+</ParamField>
+
+<ParamField path="ALLOWED_ORIGINS" type="string">
+  Comma-separated list of additional origins allowed by CORS. Useful when multiple frontends (e.g., a staging dashboard) need access.
+
+  Defaults to an empty list.
+
+  ```env
+  ALLOWED_ORIGINS="https://staging.yourdomain.com,https://other-app.com"
+  ```
+</ParamField>
+
+<Note>
+  Requests with no `Origin` header — such as those from the Android SDK, curl, or server-to-server calls — are always allowed regardless of these settings.
+</Note>
+
+## Public URL
+
+<ParamField path="BASE_URL" type="string">
+  The public-facing base URL of this server. Used when constructing absolute URLs in responses.
+
+  Defaults to `https://ads.paidappstore.com`.
+
+  ```env
+  BASE_URL="https://api.yourdomain.com"
+  ```
+</ParamField>
+
+## Link shortener integration
+
+The PIN flow relies on an external link-shortener service. When a user taps "Get PIN" in the app, the SDK calls `/api/sdk/create-link`, which calls the shortener API to create a verification URL. After the user completes the ad pages on that URL, the shortener backend calls `/api/sdk/generate-pin` using the `SHORTENER_SECRET` to issue a PIN.
+
+<ParamField path="SHORTENER_SECRET" type="string">
+  Shared secret between the AdVerify server and the link-shortener backend. The shortener must send `Authorization: Bearer <SHORTENER_SECRET>` when calling `POST /api/sdk/generate-pin`.
+
+  Defaults to `change-me-in-production`.
+
+  <Warning>
+    Rotate this value immediately in production. Any party that knows this secret can generate PINs for any device.
+  </Warning>
+
+  ```env
+  SHORTENER_SECRET="a-long-random-secret-string"
+  ```
+</ParamField>
+
+<ParamField path="SHORTENER_API_URL" type="string">
+  Base URL of the shortener's API. The server POSTs to `{SHORTENER_API_URL}/api/v1/adverify/create` to create new verification links.
+
+  Defaults to `https://api.paidappstore.com`.
+
+  ```env
+  SHORTENER_API_URL="https://api.yourshortener.com"
+  ```
+</ParamField>
+
+<ParamField path="SHORTENER_FRONTEND_URL" type="string">
+  Public URL of the shortener's frontend. Verification links sent to users are constructed as `{SHORTENER_FRONTEND_URL}/verify/{code}`.
+
+  Defaults to `https://paidappstore.com`.
+
+  ```env
+  SHORTENER_FRONTEND_URL="https://yourshortener.com"
+  ```
+</ParamField>
+
+## Full example `.env`
+
+```env
+# Database
+DATABASE_URL="postgresql://adverify:secret@localhost:5432/adverify"
+
+# Server
+PORT=3042
+
+# Admin
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="s0me-str0ng-p@ssword"
+
+# CORS
+FRONTEND_URL="https://admin.yourdomain.com"
+ALLOWED_ORIGINS=""
+
+# Public URL
+BASE_URL="https://api.yourdomain.com"
+
+# Link shortener
+SHORTENER_SECRET="replace-with-a-long-random-string"
+SHORTENER_API_URL="https://api.yourshortener.com"
+SHORTENER_FRONTEND_URL="https://yourshortener.com"
+```

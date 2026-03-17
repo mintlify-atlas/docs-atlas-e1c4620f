@@ -1,0 +1,71 @@
+---
+title: "User PINs"
+description: "View, filter, expire, and revoke device PIN records across all your apps."
+---
+
+The User PINs page shows every `UserPin` record in the database. Use it to audit PIN activity, investigate support requests, and manually manage device access.
+
+## PIN lifecycle
+
+1. A device calls `POST /api/sdk/generate-pin` (via the link-shortener flow) — a new `UserPin` row is created with `isUsed: false`.
+2. The user enters the PIN in the app. The SDK calls `POST /api/sdk/verify-pin`. On success, `isUsed` is set to `true`, `usedAt` is stamped, and `expiresAt` is calculated based on the app's `PinConfig.expiryMode`.
+3. On every subsequent `POST /api/sdk/init`, the server checks whether the PIN for that device is still active. If `expiresAt` is set and has passed, `pinRequired: true` is returned.
+
+## PIN stats
+
+Four summary cards appear above the table and update automatically when you change the date filter:
+
+| Stat | Description |
+|---|---|
+| Generated | PINs created on the selected date (defaults to today) |
+| Used | PINs verified on the selected date |
+| Active PINs | PINs currently verified and not expired, across all dates |
+| Expired PINs | PINs whose `expiresAt` is in the past |
+
+## Filtering
+
+- **Date picker** — filter the table and stats to a specific calendar date. Click the **×** button to clear the date filter.
+- **App selector** — filter by API key. Defaults to all apps.
+
+## UserPin fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Int` | Auto-incremented primary key |
+| `apiKeyId` | `Int` | ID of the API key (app) this PIN belongs to |
+| `deviceId` | `String` | Android ID of the device that generated the PIN |
+| `pin` | `String` | The 6-digit (or configured length) PIN value |
+| `isUsed` | `Boolean` | `true` once the PIN has been verified by the device |
+| `createdAt` | `DateTime` | When the PIN record was created |
+| `usedAt` | `DateTime?` | When the PIN was first verified; `null` if not yet used |
+| `expiresAt` | `DateTime?` | Expiry timestamp; `null` means it never expires |
+
+## PIN status labels
+
+| Status | Meaning |
+|---|---|
+| **Pending** | `isUsed` is `false` — the PIN has been generated but not yet entered |
+| **Active** | `isUsed` is `true` and either `expiresAt` is `null` or has not passed |
+| **Expired** | `isUsed` is `true` and `expiresAt` is in the past |
+
+## Actions
+
+### Expire a PIN
+
+Click **Expire** on any **Active** PIN. This sets `expiresAt` to the current timestamp, immediately invalidating the PIN. The next time the device calls `/api/sdk/init`, the server returns `pinRequired: true` and the user must re-verify.
+
+Expiry is available only for active PINs (the button is hidden for Pending and already-Expired records).
+
+### Revoke a device
+
+Click **Revoke** next to any PIN record. This deletes **all** `UserPin` rows for that `deviceId` and `apiKeyId` combination. The device loses access entirely until it generates a new PIN.
+
+<Warning>
+Revoking a device deletes every PIN record for that device and app. This action cannot be undone.
+</Warning>
+
+## Automatic expiry
+
+PINs are not expired by a background job. Expiry is evaluated lazily: every call to `POST /api/sdk/init` checks the device's active PIN against the current time. If `expiresAt` is set and has passed, the server returns `pinRequired: true` in the response.
+
+This means `totalExpired` on the dashboard reflects PINs that have a past `expiresAt` value, regardless of whether the device has attempted to use them since expiry.

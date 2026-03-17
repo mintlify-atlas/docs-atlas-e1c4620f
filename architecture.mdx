@@ -1,0 +1,139 @@
+---
+title: "Architecture"
+description: "How the Android SDK, Express.js server, and Next.js admin panel fit together."
+---
+
+## System overview
+
+AdVerify is a three-component system. Each component has a distinct responsibility:
+
+<CardGroup cols={2}>
+  <Card title="Android SDK" icon="mobile">
+    Java library (zero dependencies, min API 21). Packaged as an AAR for Android Studio and as a DEX file for MT Manager / smali injection. Handles the full user-facing flow: init, PIN verification, and ad display.
+  </Card>
+  <Card title="Express.js Server" icon="server">
+    TypeScript API server. Validates API keys, manages PIN state, serves ad creatives, and records impressions and clicks. Backed by PostgreSQL via Prisma ORM.
+  </Card>
+  <Card title="Next.js Admin Panel" icon="chart-bar">
+    Web dashboard (App Router). Lets operators create API keys, configure PIN rules, upload ads, view verified devices, and read analytics.
+  </Card>
+  <Card title="PostgreSQL + Prisma" icon="database">
+    Single source of truth for all state. Prisma ORM handles migrations and type-safe queries. The database is accessed only by the Express server — never directly by the SDK or admin panel.
+  </Card>
+</CardGroup>
+
+## Architecture diagram
+
+```
+┌──────────────────┐     ┌──────────────────┐     ┌──────────────────┐
+│   Android App    │────>│   Express API    │<────│   Admin Panel    │
+│   (SDK inside)   │     │   (Server)       │     │   (Next.js)      │
+└──────────────────┘     └──────────────────┘     └──────────────────┘
+                                  │
+                          ┌───────┴───────┐
+                          │   PostgreSQL   │
+                          │   (Prisma)     │
+                          └───────────────┘
+```
+
+## SDK flow
+
+Every call to `AdVerify.show()` triggers the following sequence inside `AdLoader`:
+
+```
+App Launch
+    │
+    ▼
+SDK calls POST /api/sdk/init  (with deviceId, x-api-key header)
+    │
+    ├── pinEnabled=false  OR  pinVerified=true
+    │       → Fetch ads  (GET /api/sdk/ads)
+    │       → Display AdDialog
+    │       → Track impression  (POST /api/sdk/impression)
+    │       → On click: track click  (POST /api/sdk/click)
+    │
+    └── pinEnabled=true  AND  pinVerified=false
+            → Show PinVerifyDialog
+                │
+                ├── "Generate PIN & Verify" button
+                │       → POST /api/sdk/create-link  → open browser
+                │       → User views articles/ads, receives PIN
+                │       → Dialog switches to PIN entry state
+                │
+                ├── "Tutorial" button → opens tutorialUrl
+                ├── "Join Us" button  → shows JoinDialog (community links)
+                └── "Exit" button     → activity.finish()
+                │
+                ▼
+            User enters PIN → POST /api/sdk/verify-pin
+                │
+                ├── Valid   → dismiss dialog → fetch & show ads
+                └── Invalid → show error + remaining attempts
+```
+
+<Note>
+  The SDK renders all dialogs programmatically using Android's `Canvas`, `Paint`, and `GradientDrawable` APIs. There are zero external dependencies — the AAR adds nothing to your dependency graph.
+</Note>
+
+## API authentication
+
+Every SDK endpoint requires an `x-api-key` header. The value must match an active `ApiKey` record in the database.
+
+```http
+POST /api/sdk/init HTTP/1.1
+Host: your-server.com
+x-api-key: YOUR_API_KEY
+Content-Type: application/json
+
+{ "deviceId": "abc123" }
+```
+
+<Warning>
+  Requests without a valid `x-api-key` are rejected by the server middleware before reaching any route handler. Keep your API key out of version control.
+</Warning>
+
+## API endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/sdk/init` | `POST` | Initialize SDK — returns PIN status, ad config, and join links |
+| `/api/sdk/verify-pin` | `POST` | Verify a PIN for the calling device |
+| `/api/sdk/create-link` | `POST` | Generate a shortener link that delivers a PIN to the user |
+| `/api/sdk/ads` | `GET` | Fetch active ad creatives for the API key |
+| `/api/sdk/impression` | `POST` | Record that an ad was shown to a device |
+| `/api/sdk/click` | `POST` | Record that a user tapped an ad |
+
+## Database models
+
+The Prisma schema defines six models. All tables cascade deletes from `ApiKey` downward.
+
+| Model | Table | Purpose |
+|-------|-------|---------|
+| `ApiKey` | `api_keys` | One record per integrated app. Holds the API key string, app name, and package name. |
+| `Ad` | `ads` | Ad creatives: title, description, image URL, redirect URL, button text, priority, and active flag. |
+| `PinConfig` | `pin_configs` | One-to-one with `ApiKey`. Controls `pinEnabled`, `pinMessage`, `maxAttempts`, expiry mode/hours, tutorial URL, info items, and join links. |
+| `UserPin` | `user_pins` | One PIN per `(apiKeyId, deviceId)` pair. Records whether it has been used and its optional `expiresAt` timestamp. |
+| `Impression` | `impressions` | Append-only log of every ad shown, keyed by ad, API key, and device. |
+| `Click` | `clicks` | Append-only log of every ad tap, with the same keys as `Impression`. |
+
+## PIN expiry
+
+PIN verification lifetime is controlled by the `PinConfig.expiryMode` field:
+
+| `expiryMode` | Behavior |
+|---|---|
+| `never` | Once a device verifies, it stays verified permanently. `UserPin.expiresAt` is `null`. |
+| `duration` | Verification expires after `expiryHours` hours (default 24). The server deletes the expired `UserPin` record on the next `/api/sdk/init` call, and the user sees the PIN dialog again. |
+
+## Express server entry point
+
+The server mounts four route groups:
+
+```typescript
+app.use('/api',            healthRoutes);   // Public health check
+app.use('/api/sdk',        sdkRoutes);      // SDK endpoints (x-api-key required)
+app.use('/api/admin',      adminRoutes);    // Admin panel endpoints
+app.use('/api/admin/patch', patcherRoutes); // DEX/smali patch helpers
+```
+
+CORS is configured to allow the admin panel's origin plus any additional origins listed in `ALLOWED_ORIGINS`. Mobile SDK requests (no `Origin` header) are always permitted.

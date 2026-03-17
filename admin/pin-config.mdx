@@ -1,0 +1,133 @@
+---
+title: "PIN configuration"
+description: "Configure PIN verification behavior per app, including expiry mode, message text, max attempts, tutorial links, and info items."
+---
+
+PIN configuration controls how the SDK presents the PIN verification flow to users. Each API key has its own independent `PinConfig` record. Changes take effect immediately for all new SDK `/api/sdk/init` calls.
+
+## Selecting an app
+
+The PIN Config page shows a list of all your API keys as selector buttons. Click an app to load its current configuration. A green dot on the button indicates the app already has a saved config. If no config exists yet, the form loads with defaults.
+
+## Configuration fields
+
+<ParamField path="pinEnabled" type="boolean">
+  Master toggle. When `false`, the SDK skips PIN verification entirely for this app. Default: `false`.
+</ParamField>
+
+<ParamField path="pinMessage" type="string">
+  The message shown in the PIN dialog header. Default: `"Enter PIN to unlock"`.
+</ParamField>
+
+<ParamField path="maxAttempts" type="number">
+  Maximum number of incorrect PIN entries allowed before the user is locked out. Range: 1–20. Default: `3`.
+</ParamField>
+
+<ParamField path="getPinBtnText" type="string">
+  Label on the button that directs users to obtain their PIN (e.g. from a Telegram channel). Default: `"Get PIN"`.
+</ParamField>
+
+<ParamField path="enterPinBtnText" type="string">
+  Label on the button that submits the PIN the user has typed. Default: `"Enter PIN"`.
+</ParamField>
+
+<ParamField path="getPinUrl" type="string">
+  URL opened when the user taps the get-PIN button. Typically a Telegram channel or landing page where PINs are distributed. Default: `""`.
+</ParamField>
+
+<ParamField path="expiryMode" type="string">
+  How long a verified PIN remains valid. One of `"never"` or `"duration"`. Default: `"never"`.
+</ParamField>
+
+<ParamField path="expiryHours" type="number">
+  Used only when `expiryMode` is `"duration"`. Number of hours after first use before the PIN expires and the user must re-verify. Default: `24`.
+</ParamField>
+
+<ParamField path="tutorialUrl" type="string">
+  URL linked from the PIN dialog to a tutorial explaining how to obtain and enter a PIN. Default: `"https://t.me/EllieTutorials/36"`.
+</ParamField>
+
+<ParamField path="pinInfoItems" type="JSON array">
+  Array of informational items displayed in the PIN dialog. Each item describes a feature or benefit. See [pinInfoItems format](#pinInfoItems-format) below.
+</ParamField>
+
+<ParamField path="joinLinks" type="JSON array">
+  Array of link objects shown in the PIN dialog, e.g. Telegram channel links. Each object contains a label and a URL.
+</ParamField>
+
+## Expiry modes
+
+<Tabs>
+  <Tab title="Never expire">
+    Once a user verifies their PIN, the verification is permanent. The SDK will not prompt again on the same device (for the same app) unless the PIN record is manually revoked.
+
+    ```json
+    { "expiryMode": "never" }
+    ```
+
+    Use this mode when you want a one-time friction check.
+  </Tab>
+  <Tab title="Time-based expiry">
+    The verification expires after a set number of hours. When the PIN record expires, the next `/api/sdk/init` call returns `pinRequired: true` and the user must verify again.
+
+    ```json
+    { "expiryMode": "duration", "expiryHours": 48 }
+    ```
+
+    Use this mode to enforce recurring verification — for example, every 24 or 48 hours.
+
+    <Note>
+    The server evaluates expiry on every `/api/sdk/init` call by comparing `expiresAt` against the current UTC time. There is no background expiry job.
+    </Note>
+  </Tab>
+</Tabs>
+
+## pinInfoItems format
+
+`pinInfoItems` is a JSON array stored in the `pin_info_items` column. Each element describes one informational bullet shown in the PIN dialog:
+
+```json
+[
+  {
+    "icon": "key",
+    "color": "#10b981",
+    "title": "Your personal key",
+    "description": "Each device gets a unique PIN tied to your Android ID."
+  },
+  {
+    "icon": "shield-x",
+    "color": "#ef4444",
+    "title": "Cannot be shared",
+    "description": "Your PIN only works on the device it was generated for."
+  }
+]
+```
+
+### Supported icon values
+
+| Icon value | Use case |
+|---|---|
+| `device` / `info` | Device information or general info |
+| `clock` / `hourglass` | Time limits or expiry |
+| `key` / `sparkle` | Unique PIN or premium feature |
+| `star` / `crown` | Premium or VIP status |
+| `warning` / `shield-x` | Restrictions or warnings |
+
+## joinLinks format
+
+`joinLinks` is a JSON array. Each element contains a label and a URL:
+
+```json
+[
+  { "label": "Join Telegram", "url": "https://t.me/yourchannel" },
+  { "label": "Visit Website", "url": "https://example.com" }
+]
+```
+
+## Saving configuration
+
+Click **Save Configuration** at the bottom of the form. The server performs an upsert — it creates a new `PinConfig` record if one does not exist, or updates the existing record for the selected API key.
+
+<Tip>
+You can configure a second app immediately by clicking a different app selector button after saving. The form reloads with that app's current configuration.
+</Tip>

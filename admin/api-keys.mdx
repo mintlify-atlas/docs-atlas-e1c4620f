@@ -1,0 +1,78 @@
+---
+title: "API keys"
+description: "Create and manage API keys that authenticate your Android apps with the AdVerify server."
+---
+
+Every Android app that integrates the AdVerify SDK must use a unique API key. The key identifies the app to the server, links it to its own ad inventory and PIN configuration, and is validated on every SDK request via the `x-api-key` header.
+
+## What is an API key
+
+An API key is a randomly-generated secret string stored in the `api_keys` database table. It is created once per app and must be embedded in the app at build time (or via the MT Manager patch flow). The server rejects any SDK request that carries an invalid or disabled key.
+
+## Creating a key
+
+1. Navigate to **API Keys** in the sidebar.
+2. Click **New Key**.
+3. Fill in the form and click **Create Key**.
+
+<ParamField path="appName" type="string" required>
+  Human-readable name for the app, e.g. `My Paid App`. Shown throughout the panel to identify the app in ad and PIN config selectors.
+</ParamField>
+
+<ParamField path="packageName" type="string" required>
+  Android package name, e.g. `com.example.myapp`. Used for reference and display; the server does not enforce this value against incoming requests.
+</ParamField>
+
+The server generates a `key` value (a UUID-like string) automatically and sets `isActive` to `true`.
+
+## Key fields
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Int` | Auto-incremented primary key |
+| `key` | `String` | The secret key string sent in `x-api-key` |
+| `appName` | `String` | Display name of the app |
+| `packageName` | `String` | Android package name |
+| `isActive` | `Boolean` | Whether the key is accepted by the server |
+| `createdAt` | `DateTime` | Timestamp of key creation |
+
+## Using the key in the SDK
+
+Pass the key as the `apiKey` argument when calling `AdVerify.init()`, or embed it in `AndroidManifest.xml` for MT Manager patching:
+
+```xml
+<meta-data
+  android:name="adverify.api_key"
+  android:value="YOUR_API_KEY" />
+```
+
+For direct HTTP calls, include the key in the request header:
+
+```http
+GET /api/sdk/ads HTTP/1.1
+x-api-key: YOUR_API_KEY
+```
+
+## Enabling and disabling keys
+
+Click **Disable** next to a key to set `isActive` to `false`. The server immediately starts rejecting SDK requests from that key. Click **Enable** to restore access.
+
+Disabling a key is a safe way to temporarily suspend an app without deleting its ads, PIN configuration, or user PIN records.
+
+## Deleting a key
+
+Click **Delete** and confirm. Deletion cascades — all ads, PIN configuration, user PINs, impressions, and clicks tied to the key are permanently removed from the database.
+
+<Warning>
+Deleting an API key is irreversible. All associated ads, PIN records, and analytics data are permanently erased. Disable the key instead if you need temporary suspension.
+</Warning>
+
+## Security
+
+<Warning>
+Treat API keys as secrets. Anyone who holds a key can make valid SDK requests to your server, which counts impressions and queries PIN state. Do not commit keys to version control or log them in plain text.
+</Warning>
+
+- Store keys in your app as a build-time constant or via the manifest meta-data approach.
+- Rotate a key by creating a new one, updating the app, and deleting the old key once the new version is deployed.
+- Use `isActive` to block a compromised key immediately without waiting for an app update.

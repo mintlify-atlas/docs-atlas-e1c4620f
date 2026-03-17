@@ -1,0 +1,192 @@
+---
+title: "Admin: API keys"
+description: "Create, list, update, and delete API keys for Android apps."
+---
+
+API keys identify Android applications that integrate the AdVerify SDK. Each key is a 32-character hex string generated server-side. Creating a key automatically provisions a default `PinConfig` record for it.
+
+<Note>
+All admin endpoints require HTTP Basic authentication.
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/keys
+```
+</Note>
+
+---
+
+## GET /api/admin/keys
+
+Returns all API keys ordered by creation date, newest first.
+
+### Response fields
+
+Returns an array of key objects.
+
+<ResponseField name="id" type="number">
+  Auto-incremented primary key.
+</ResponseField>
+
+<ResponseField name="key" type="string">
+  The 32-character hex API key sent by the SDK via the `x-api-key` header.
+</ResponseField>
+
+<ResponseField name="appName" type="string">
+  Human-readable application name.
+</ResponseField>
+
+<ResponseField name="packageName" type="string">
+  Android package identifier (e.g. `com.example.app`). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="isActive" type="boolean">
+  Whether the key is currently accepted by the SDK auth middleware. Inactive keys are rejected with HTTP 403.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string">
+  ISO 8601 timestamp of when the key was created.
+</ResponseField>
+
+### Example
+
+```bash
+curl -u "admin:password" https://your-server.com/api/admin/keys
+```
+
+```json
+[
+  {
+    "id": 3,
+    "key": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
+    "appName": "My App",
+    "packageName": "com.example.myapp",
+    "isActive": true,
+    "createdAt": "2025-06-01T10:00:00.000Z"
+  }
+]
+```
+
+---
+
+## POST /api/admin/keys
+
+Creates a new API key. The `key` value is generated automatically using `crypto.randomBytes(16)`. A default `PinConfig` record is created alongside the key.
+
+### Request body
+
+<ParamField body="appName" type="string" required>
+  Human-readable name for the application. Minimum one character.
+</ParamField>
+
+<ParamField body="packageName" type="string">
+  Android package name (e.g. `com.example.app`). Defaults to an empty string if omitted.
+</ParamField>
+
+### Response fields
+
+Returns the newly created key object. See [GET /api/admin/keys](#get-apiadminkeys) for field descriptions.
+
+### Example
+
+```bash
+curl -u "admin:password" \
+  -X POST https://your-server.com/api/admin/keys \
+  -H "Content-Type: application/json" \
+  -d '{"appName": "My App", "packageName": "com.example.myapp"}'
+```
+
+```json
+{
+  "id": 4,
+  "key": "f7e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0",
+  "appName": "My App",
+  "packageName": "com.example.myapp",
+  "isActive": true,
+  "createdAt": "2025-06-15T09:30:00.000Z"
+}
+```
+
+---
+
+## PATCH /api/admin/keys/:id
+
+Partially updates an existing API key. All body fields are optional; only provided fields are updated.
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the API key to update.
+</ParamField>
+
+### Request body
+
+<ParamField body="appName" type="string">
+  New human-readable application name.
+</ParamField>
+
+<ParamField body="packageName" type="string">
+  New Android package name.
+</ParamField>
+
+<ParamField body="isActive" type="boolean">
+  Set to `false` to disable the key without deleting it. Disabled keys are rejected by the SDK middleware.
+</ParamField>
+
+### Response fields
+
+Returns the updated key object. See [GET /api/admin/keys](#get-apiadminkeys) for field descriptions.
+
+### Example
+
+```bash
+curl -u "admin:password" \
+  -X PATCH https://your-server.com/api/admin/keys/4 \
+  -H "Content-Type: application/json" \
+  -d '{"isActive": false}'
+```
+
+```json
+{
+  "id": 4,
+  "key": "f7e8d9c0b1a2f7e8d9c0b1a2f7e8d9c0",
+  "appName": "My App",
+  "packageName": "com.example.myapp",
+  "isActive": false,
+  "createdAt": "2025-06-15T09:30:00.000Z"
+}
+```
+
+---
+
+## DELETE /api/admin/keys/:id
+
+Permanently deletes an API key and all associated records (ads, PIN config, user PINs, impressions, clicks) via cascading deletes.
+
+<Warning>
+This action is irreversible. All ads, PIN configurations, user PINs, impressions, and clicks linked to this key will be permanently deleted.
+</Warning>
+
+### Path parameters
+
+<ParamField path="id" type="number" required>
+  The numeric ID of the API key to delete.
+</ParamField>
+
+### Response fields
+
+<ResponseField name="status" type="string">
+  Always `"deleted"` on success.
+</ResponseField>
+
+### Example
+
+```bash
+curl -u "admin:password" \
+  -X DELETE https://your-server.com/api/admin/keys/4
+```
+
+```json
+{
+  "status": "deleted"
+}
+```

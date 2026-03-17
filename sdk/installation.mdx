@@ -1,0 +1,94 @@
+---
+title: "Installation"
+description: "Add the AdVerify AAR to your Android project in under two minutes."
+---
+
+The AdVerify SDK is distributed as a compiled AAR file. It has **zero external dependencies** — no additional libraries or Gradle configuration beyond what is shown below.
+
+**Requirements**
+
+- Java 11 or higher (compile target)
+- Android minSdkVersion **21** or higher
+- Internet permission in `AndroidManifest.xml`
+
+<Steps>
+
+<Step title="Copy the AAR into your project">
+
+Place the `adverify.aar` file inside your app module's `libs/` folder:
+
+```
+app/
+  libs/
+    adverify.aar
+  src/
+  build.gradle
+```
+
+Create the `libs/` directory if it does not already exist.
+
+</Step>
+
+<Step title="Add the AAR as a dependency">
+
+Open `app/build.gradle` and add the `libs` folder as a file-tree dependency:
+
+```groovy
+android {
+    compileSdk 34
+
+    defaultConfig {
+        minSdk 21
+        // ...
+    }
+}
+
+dependencies {
+    implementation fileTree(dir: 'libs', include: ['*.aar'])
+
+    // No other AdVerify dependencies required
+}
+```
+
+Sync your project after saving the file.
+
+</Step>
+
+<Step title="Add the Internet permission">
+
+Open `AndroidManifest.xml` and add the `INTERNET` permission inside the `<manifest>` tag:
+
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:label="@string/app_name"
+        ...
+    >
+        <!-- activities -->
+    </application>
+
+</manifest>
+```
+
+<Note>
+  If your server URL uses plain HTTP (not HTTPS), also add
+  `android:usesCleartextTraffic="true"` to the `<application>` tag.
+</Note>
+
+</Step>
+
+</Steps>
+
+## Verifying the Setup
+
+After syncing, you should be able to import the SDK without errors:
+
+```java
+import com.adverify.sdk.AdVerify;
+import com.adverify.sdk.AdVerifyCallback;
+```
+
+If the import cannot be resolved, confirm that `adverify.aar` is present in `app/libs/` and that the `fileTree` dependency is declared correctly in `build.gradle`.

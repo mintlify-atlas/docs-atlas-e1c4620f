@@ -1,0 +1,226 @@
+---
+title: "Security"
+description: "Security features built into the AdVerify SDK and server, and best practices for deploying safely."
+---
+
+AdVerify includes several layers of security to protect your API key, prevent PIN sharing, and ensure the verification flow cannot be bypassed by screenshots or screen recording. This page documents each mechanism and what you should do to harden your deployment.
+
+## API Key Security
+
+Every SDK request requires the `x-api-key` header. The server's `sdkAuth` middleware validates the key on every call:
+
+```typescript
+// auth.ts
+export async function sdkAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  const apiKey = req.headers['x-api-key'] as string | undefined;
+
+  if (!apiKey) {
+    res.status(401).json({ error: 'API key is required' });
+    return;
+  }
+
+  const keyData = await prisma.apiKey.findUnique({ where: { key: apiKey, isActive: true } });
+
+  if (!keyData) {
+    res.status(403).json({ error: 'Invalid or inactive API key' });
+    return;
+  }
+
+  req.apiKeyData = keyData;
+  next();
+}
+```
+
+**Best practices:**
+
+- Store the API key in `AndroidManifest.xml` meta-data and read it at runtime via `adverify.api_key`. This is what `AdVerify.start(activity)` does automatically — it avoids hardcoding the key in a string literal inside a Java class where it is trivial to extract with a decompiler.
+- Each API key is scoped to an `appName` and `packageName` in the `ApiKey` table. Create a separate key per app.
+- Rotate compromised keys from the admin panel. The `isActive` flag can be set to `false` to revoke a key without deleting its data.
+
+<Warning>
+  API keys embedded in Android apps can always be extracted by a determined attacker. The key controls which ads and PIN config are served — it is not a secret that protects user data. Treat it like a public identifier, and rely on server-side rate limiting and `isActive` revocation for abuse mitigation.
+</Warning>
+
+## FLAG_SECURE — Blocking Screenshots and Screen Recording
+
+Both `AdVerify.start()` overloads call `FLAG_SECURE` on the activity window before doing anything else:
+
+```java
+// AdVerify.java — start()
+public static void start(Activity activity) {
+    // Block screenshots and screen recording
+    activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    ...
+}
+
+public static void start(Activity activity, String apiKey, String baseUrl) {
+    activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
+    ...
+}
+```
+
+`FLAG_SECURE` does the following:
+
+- **Blocks screenshots**: The Android system prevents the user from taking a screenshot while this activity is in the foreground. Attempts return a black image.
+- **Blocks screen recording**: Screen capture APIs and screen-recording apps see a black rectangle instead of the activity content.
+- **Blocks the Recents thumbnail**: The app switcher shows a blank or black tile instead of the last frame, preventing PINs or ad content from appearing in the task switcher.
+
+<Note>
+  `FLAG_SECURE` is applied to the entire `Activity` window, not just the SDK dialogs. If you call `AdVerify.start()`, the entire activity (including content behind the dialogs) becomes screenshot-protected for the lifetime of that activity.
+</Note>
+
+This is particularly important for the PIN verification dialog — it prevents users from photographing their PIN and sharing it with others to bypass the flow.
+
+## Device ID Binding
+
+PINs are cryptographically tied to the device via `Settings.Secure.ANDROID_ID`:
+
+```java
+// AdVerify.java — init()
+sDeviceId = Settings.Secure.getString(
+    context.getContentResolver(),
+    Settings.Secure.ANDROID_ID
+);
+```
+
+`ANDROID_ID` is a 64-bit hex string unique to each (device, user, app-signing-key) combination on Android 8.0+. The server stores the `deviceId` alongside every `UserPin` record:
+
+```prisma
+model UserPin {
+  deviceId  String    @map("device_id")
+  pin       String
+  isUsed    Boolean   @default(false)
+  ...
+  @@unique([apiKeyId, deviceId, pin])
+}
+```
+
+When a PIN is verified, the server matches `{ apiKeyId, deviceId, pin, isUsed: false }`. A PIN generated for device A cannot be used to verify device B — even if the same user shares the PIN digits.
+
+<Note>
+  On Android 8.0+ `ANDROID_ID` changes if the device is factory reset or the app is re-installed with a different signing certificate. Users who reset their device will need to complete the verification flow again.
+</Note>
+
+## PIN Attempts Limiting
+
+The `PinConfig.maxAttempts` field (default `3`) caps the number of incorrect PIN entries before the `onMaxAttemptsReached` callback is triggered.
+
+Configure it from the admin panel under **PIN Configuration**. The value is returned in the init response:
+
+```json
+{
+  "maxAttempts": 5
+}
+```
+
+The SDK's `PinVerifyDialog` enforces the limit client-side and calls `PinListener.onMaxAttemptsReached()` when it is hit. `AdLoader` forwards this to your `AdVerifyCallback`:
+
+```java
+// AdLoader.java
+@Override
+public void onMaxAttemptsReached() {
+    if (callback != null) callback.onError("Max PIN attempts reached");
+}
+```
+
+Handle this in your callback to decide what to do — for example, close the activity:
+
+```java
+AdVerify.show(activity, new AdVerifyCallback() {
+    @Override
+    public void onError(String message) {
+        if ("Max PIN attempts reached".equals(message)) {
+            activity.finish();
+        }
+    }
+    ...
+});
+```
+
+<Tip>
+  Set `maxAttempts` to `3`–`5` for most apps. Too low frustrates legitimate users who mistype; too high allows brute-force attempts against 6-digit PINs (1,000,000 possible values).
+</Tip>
+
+## VPN and Emulator Warnings
+
+The default info card list includes a warning item for VPN and emulator users:
+
+```java
+// AdLoader.java — FALLBACK_INFO_ITEMS
+new PinInfoItem("shield", "VPN & Emulators Not Allowed", "#ef4444"),
+```
+
+This is a **UI warning**, not a technical block. The SDK does not perform emulator detection or VPN detection itself. The warning informs users that their PIN may not be issued or may be withheld if they are behind a VPN or using an emulator — a policy enforced at the shortener/ad-page level, not in the SDK.
+
+If you want to enforce this technically, implement the check in your shortener backend before calling `POST /api/sdk/generate-pin`.
+
+## Admin Authentication
+
+The admin panel API uses HTTP Basic authentication, validated in the `adminAuth` middleware:
+
+```typescript
+// auth.ts
+export function adminAuth(req: Request, res: Response, next: NextFunction) {
+  const authHeader = req.headers['authorization'];
+
+  if (!authHeader?.startsWith('Basic ')) {
+    res.status(401).json({ error: 'Admin authentication required' });
+    return;
+  }
+
+  const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf-8');
+  const [username, password] = decoded.split(':');
+
+  if (username !== env.ADMIN_USERNAME || password !== env.ADMIN_PASSWORD) {
+    res.status(403).json({ error: 'Invalid admin credentials' });
+    return;
+  }
+
+  next();
+}
+```
+
+Credentials are set via environment variables:
+
+```bash
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=your-strong-password-here
+```
+
+**Best practices:**
+
+- Use a long, randomly generated password (20+ characters)
+- Do not reuse the admin password elsewhere
+- Restrict access to the admin panel URL at the network/proxy level (e.g. only accessible from your IP or VPN)
+- Basic auth transmits credentials base64-encoded — this is not encryption. **HTTPS is mandatory** for the admin panel (see below)
+
+## HTTPS Recommendation
+
+All communication between the SDK and your server — including API keys, device IDs, and PINs — travels over HTTP. Use HTTPS in production to prevent interception.
+
+Configure the server URL in the SDK:
+
+```java
+// Always use https:// in production
+AdVerify.init(context, "YOUR_API_KEY", "https://your-server.com");
+```
+
+If you use `http://` in production, Android's network security policy may block cleartext traffic on API level 28+ (Android 9+). To allow it (not recommended) you would need to add a `network_security_config.xml` — instead, provision a TLS certificate for your server.
+
+```xml
+<!-- AndroidManifest.xml meta-data for AdVerify.start() -->
+<meta-data android:name="adverify.api_key" android:value="YOUR_API_KEY" />
+<meta-data android:name="adverify.base_url" android:value="https://your-server.com" />
+```
+
+<Warning>
+  The default `adverify.base_url` fallback in the SDK is `https://ads.paidappstore.com`. If you self-host, always override this with your own server URL — otherwise your app will send device IDs and API keys to the default server.
+</Warning>
+
+### TLS Checklist
+
+- [ ] Server is reachable over `https://`
+- [ ] Certificate is valid and not self-signed (or the SDK trusts your CA)
+- [ ] `adverify.base_url` in `AndroidManifest.xml` uses `https://`
+- [ ] Admin panel is not exposed over plain HTTP
+- [ ] `ADMIN_USERNAME` and `ADMIN_PASSWORD` are set as environment variables, not hardcoded

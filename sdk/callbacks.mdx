@@ -1,0 +1,101 @@
+---
+title: "Callbacks"
+description: "React to ad lifecycle events using the AdVerifyCallback interface."
+---
+
+The `AdVerifyCallback` interface lets you observe key events in the SDK flow. Pass an implementation to `AdVerify.show()` or receive `null`-safe no-ops if you omit the callback entirely.
+
+```java
+public interface AdVerifyCallback {
+    void onAdShown();
+    void onAdClosed();
+    void onAdClicked(String redirectUrl);
+    void onError(String message);
+}
+```
+
+## Callback Methods
+
+<ResponseField name="onAdShown" type="void">
+  Called immediately after the `AdDialog` is displayed to the user. Impression tracking is fired to `/api/sdk/impression` before this callback is invoked.
+</ResponseField>
+
+<ResponseField name="onAdClosed" type="void">
+  Called when the ad dialog is dismissed — either by the user tapping the **Close** button or by any other dismiss action. Also called when the user taps the CTA button (the dialog closes after the click).
+</ResponseField>
+
+<ResponseField name="onAdClicked" type="void">
+  Called when the user taps the CTA button on the ad. The SDK fires a click-tracking request to `/api/sdk/click`, opens the redirect URL in the device browser, and then dismisses the dialog.
+
+  **Parameter:** `redirectUrl` — the destination URL configured for the ad. May be an empty string if no URL was set.
+</ResponseField>
+
+<ResponseField name="onError" type="void">
+  Called when the SDK encounters an error and cannot show an ad. The dialog is not displayed in these cases.
+
+  **Parameter:** `message` — a human-readable description of the error.
+</ResponseField>
+
+---
+
+## Error Scenarios
+
+The following table lists every condition that triggers `onError` and the exact message string delivered:
+
+| Trigger | `message` value |
+|---------|----------------|
+| `AdVerify.show()` called with a `null` or finishing activity | `"Activity is null or finishing"` |
+| Network failure or non-2xx response from `/api/sdk/init` | HTTP error string from the server, e.g. `"HTTP 401: Unauthorized"` |
+| No ads returned by `/api/sdk/ads` | `"No ads available"` |
+| Network failure fetching ads | HTTP error string from the server |
+| User exceeds maximum PIN attempts | `"Max PIN attempts reached"` |
+
+<Warning>
+  `AdVerify.show()` throws `IllegalStateException` (not via callback) if `AdVerify.init()` was never called. Always call `init()` first, or use the `start()` methods which handle initialization internally.
+</Warning>
+
+---
+
+## Complete Implementation Example
+
+```java
+AdVerify.show(this, new AdVerifyCallback() {
+
+    @Override
+    public void onAdShown() {
+        // Ad dialog is now visible.
+        // You can pause background tasks here if needed.
+        Log.d("MyApp", "Ad shown");
+    }
+
+    @Override
+    public void onAdClosed() {
+        // Dialog was dismissed.
+        // Resume any paused tasks or navigate forward.
+        Log.d("MyApp", "Ad closed");
+    }
+
+    @Override
+    public void onAdClicked(String redirectUrl) {
+        // User tapped the CTA button.
+        // The SDK already opened redirectUrl in the browser.
+        Log.d("MyApp", "Ad clicked: " + redirectUrl);
+    }
+
+    @Override
+    public void onError(String message) {
+        // SDK could not display an ad.
+        Log.e("MyApp", "AdVerify error: " + message);
+
+        if ("Max PIN attempts reached".equals(message)) {
+            // User exhausted PIN attempts — handle access restriction.
+        } else if ("No ads available".equals(message)) {
+            // No active ads configured — proceed normally.
+        }
+    }
+});
+```
+
+<Note>
+  All callback methods are dispatched on the **main thread** via `Handler(Looper.getMainLooper())`, so you can update UI directly inside any callback method.
+</Note>

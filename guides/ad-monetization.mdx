@@ -1,0 +1,189 @@
+---
+title: "Ad Monetization"
+description: "How to create ads, understand the priority system, and track impressions and clicks to optimize your revenue."
+---
+
+AdVerify's ad system lets you serve interstitial dialog ads to your app's users. Ads are managed from the admin panel and delivered to the SDK through the `/api/sdk/ads` endpoint. This guide covers everything from creating effective ad creatives to reading your analytics.
+
+## Creating Ads
+
+Each ad is stored in the `Ad` table and associated with an API key. The following fields control what the SDK displays.
+
+### Ad Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `title` | String | — | Headline shown in the ad dialog |
+| `description` | String | `""` | Supporting text below the title |
+| `imageUrl` | String | `""` | URL of the banner/background image |
+| `redirectUrl` | String | `""` | URL opened when the user taps the CTA button |
+| `buttonText` | String | `"Visit Now"` | Label on the CTA button |
+| `adType` | String | `"interstitial"` | Ad format (see below) |
+| `priority` | Int | `0` | Higher value = shown first |
+| `isActive` | Boolean | `true` | Inactive ads are never returned to the SDK |
+
+### Ad Types
+
+The `adType` field is stored on the record and returned to the SDK, which uses it to control how the ad is rendered.
+
+| Value | Description |
+|---|---|
+| `interstitial` | Full-screen dialog with image, title, description, and CTA button |
+| `banner` | Inline banner format |
+| `dialog` | Compact dialog variant |
+
+<Tip>
+  `interstitial` is the most effective format for driving clicks. It takes over the screen and requires an explicit dismiss action, maximizing dwell time.
+</Tip>
+
+### Image URL Best Practices
+
+- Use a publicly accessible HTTPS URL. The SDK loads images via `HttpURLConnection` — no authentication or redirects.
+- Recommended dimensions: **1080 × 720 px** (3:2 landscape). The `AdDialog` crops and centers the image.
+- Keep file size under **300 KB** to avoid slow loads on mobile connections.
+- Use a CDN or reliable static host. A broken image URL results in the ad dialog showing no image.
+
+### Redirect URL
+
+The `redirectUrl` is opened in the system browser via `Intent.ACTION_VIEW` when the user taps the CTA button. Use a URL that:
+
+- Works in a standard browser (no app-only deep links)
+- Loads quickly on mobile
+- Corresponds to the offer described in the ad creative
+
+## Priority System
+
+The server returns all active ads ordered by `priority DESC`:
+
+```typescript
+// sdk.service.ts — getAds()
+prisma.ad.findMany({
+  where: { apiKeyId, isActive: true },
+  orderBy: { priority: 'desc' },
+});
+```
+
+The SDK always picks the **first ad** in the returned array (`ads[0]`):
+
+```java
+// AdLoader.java — fetchAndShowAds()
+if (ads.length == 0) {
+    if (callback != null) callback.onError("No ads available");
+    return;
+}
+showAd(ads[0]);
+```
+
+This means the ad with the **highest `priority` value** is always shown. If multiple ads share the same priority, the database returns them in insertion order.
+
+<Note>
+  Only one ad is shown per SDK `show()` call. Create multiple ads with different priorities to control which ad a user sees — for example, promote a time-sensitive offer by temporarily giving it the highest priority.
+</Note>
+
+## Impression Tracking
+
+An impression is recorded the moment the `AdDialog` is about to be shown. The SDK calls `trackImpression()` before `dialog.show()`:
+
+```java
+// AdLoader.java — showAd()
+client.trackImpression(ad.id);  // fires immediately
+AdDialog dialog = new AdDialog(activity, ad, listener);
+dialog.show();
+```
+
+The SDK sends `POST /api/sdk/impression`:
+
+```json
+{
+  "adId": 42,
+  "deviceId": "a1b2c3d4e5f6a1b2"
+}
+```
+
+The server creates an `Impression` record:
+
+```typescript
+// sdk.service.ts
+async trackImpression(adId: number, apiKeyId: number, deviceId: string) {
+  await prisma.impression.create({ data: { adId, apiKeyId, deviceId } });
+}
+```
+
+Impressions are tracked automatically — no extra code required in your app.
+
+## Click Tracking
+
+A click is recorded when the user taps the CTA button inside the ad dialog. The SDK fires `trackClick()` in the `onClicked` callback:
+
+```java
+// AdLoader.java — showAd()
+new AdDialog(activity, ad, new AdDialog.AdDialogListener() {
+    @Override
+    public void onClicked(String url) {
+        client.trackClick(ad.id);               // tracked on CTA tap
+        if (callback != null) callback.onAdClicked(url);
+    }
+    ...
+});
+```
+
+The SDK sends `POST /api/sdk/click`:
+
+```json
+{
+  "adId": 42,
+  "deviceId": "a1b2c3d4e5f6a1b2"
+}
+```
+
+The server creates a `Click` record in the same pattern as impressions.
+
+<Note>
+  Clicks are only tracked when the user taps the button. Dismissing the dialog does **not** count as a click.
+</Note>
+
+## Analytics in the Admin Panel
+
+The admin panel aggregates impression and click data per ad. Navigate to **Ads** in the sidebar to see:
+
+- Total impressions per ad
+- Total clicks per ad
+- Click-through rate (CTR = clicks / impressions)
+- Per-device breakdown in **User Pins** and **Dashboard**
+
+The `Impression` and `Click` tables both record `deviceId`, `adId`, `apiKeyId`, and `createdAt`, so you can filter by time range or device in custom queries.
+
+## Optimizing Click-Through Rate
+
+### Ad Creative
+
+- **Image**: Use a high-contrast image with a clear subject. Avoid text-heavy images — the title and description fields handle copy.
+- **Title**: Be specific. "Download Now — Free for 24h" outperforms "Special Offer".
+- **Description**: One sentence explaining the value. Keep it under 80 characters.
+
+### Button Text
+
+The default `buttonText` is `"Visit Now"`. Higher-converting alternatives:
+
+| Text | Use case |
+|---|---|
+| `"Get It Free"` | Free download or trial |
+| `"Claim Offer"` | Limited-time discount |
+| `"Learn More"` | Informational content |
+| `"Download"` | App or file download |
+
+### Redirect URL
+
+- Use a **landing page**, not a homepage. Users who click from an ad expect to land on content related to the ad.
+- Add UTM parameters to track traffic from AdVerify in your analytics: `?utm_source=adverify&utm_medium=interstitial`.
+- Test that the URL loads correctly on mobile before setting it live.
+
+### Priority Management
+
+- Keep only **one active ad** at a time if you want consistent placement.
+- Use priority to A/B test creatives: create two ads with the same priority and alternate between them by toggling `isActive`.
+- Deactivate underperforming ads rather than deleting them to preserve historical impression and click data.
+
+<Warning>
+  Deactivating all ads for an API key will cause the SDK to receive an empty array from `/api/sdk/ads`, triggering `AdVerifyCallback.onError("No ads available")`. Always keep at least one active ad per key.
+</Warning>

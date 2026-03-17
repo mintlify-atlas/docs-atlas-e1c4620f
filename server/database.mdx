@@ -1,0 +1,269 @@
+---
+title: "Database"
+description: "PostgreSQL schema, Prisma models, and database management commands for the AdVerify server."
+---
+
+The server uses **PostgreSQL** accessed through **Prisma ORM**. The schema is defined in `prisma/schema.prisma`. All table names use `snake_case` via `@@map`; Prisma model fields use `camelCase` in TypeScript.
+
+## Schema
+
+### ApiKey
+
+Represents a registered Android application. Each app has exactly one API key, one PIN config, and can own many ads, user PINs, impressions, and clicks. Deleting an `ApiKey` cascades to all related records.
+
+```prisma
+model ApiKey {
+  id          Int          @id @default(autoincrement())
+  key         String       @unique
+  appName     String       @map("app_name")
+  packageName String       @default("") @map("package_name")
+  isActive    Boolean      @default(true) @map("is_active")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  ads         Ad[]
+  pinConfig   PinConfig?
+  userPins    UserPin[]
+  impressions Impression[]
+  clicks      Click[]
+
+  @@map("api_keys")
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `id` | `Int` | Auto-increment primary key |
+| `key` | `String` | Unique 32-char hex key sent in `x-api-key` |
+| `appName` | `String` | Human-readable name shown in the dashboard |
+| `packageName` | `String` | Android package name (e.g. `com.example.app`) |
+| `isActive` | `Boolean` | When `false`, all SDK requests with this key are rejected |
+| `createdAt` | `DateTime` | Record creation timestamp |
+
+### Ad
+
+An advertisement served to an Android app. Each ad belongs to one `ApiKey`. Deleting the parent `ApiKey` cascades and removes all its ads.
+
+```prisma
+model Ad {
+  id          Int          @id @default(autoincrement())
+  apiKeyId    Int          @map("api_key_id")
+  title       String
+  description String       @default("")
+  imageUrl    String       @default("") @map("image_url")
+  redirectUrl String       @default("") @map("redirect_url")
+  adType      String       @default("interstitial") @map("ad_type")
+  buttonText  String       @default("Visit Now") @map("button_text")
+  isActive    Boolean      @default(true) @map("is_active")
+  priority    Int          @default(0)
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  apiKey      ApiKey       @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  impressions Impression[]
+  clicks      Click[]
+
+  @@map("ads")
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `title` | `String` | Ad headline displayed to the user |
+| `description` | `String` | Supporting body text |
+| `imageUrl` | `String` | URL of the ad creative image |
+| `redirectUrl` | `String` | URL opened when the user taps the CTA button |
+| `adType` | `String` | One of `interstitial`, `banner`, or `dialog` |
+| `buttonText` | `String` | CTA button label; defaults to `"Visit Now"` |
+| `isActive` | `Boolean` | Inactive ads are excluded from SDK responses |
+| `priority` | `Int` | Higher values are returned first by `GET /api/sdk/ads` |
+
+### PinConfig
+
+Per-app PIN gate configuration. One `PinConfig` exists per `ApiKey` (created automatically when a key is created). Controls whether a PIN is required, how PINs expire, and what the SDK UI shows.
+
+```prisma
+model PinConfig {
+  id              Int     @id @default(autoincrement())
+  apiKeyId        Int     @unique @map("api_key_id")
+  pinEnabled      Boolean @default(false) @map("pin_enabled")
+  pinMessage      String  @default("Enter PIN to unlock") @map("pin_message")
+  maxAttempts     Int     @default(3) @map("max_attempts")
+  getPinUrl       String  @default("") @map("get_pin_url")
+  getPinBtnText   String  @default("Get PIN") @map("get_pin_btn_text")
+  enterPinBtnText String  @default("Enter PIN") @map("enter_pin_btn_text")
+  expiryMode      String  @default("never") @map("expiry_mode")
+  expiryHours     Int     @default(24) @map("expiry_hours")
+  tutorialUrl     String  @default("https://t.me/EllieTutorials/36") @map("tutorial_url")
+  pinInfoItems    Json    @default("[]") @map("pin_info_items")
+  joinLinks       Json    @default("[]") @map("join_links")
+
+  apiKey          ApiKey  @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@map("pin_configs")
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `pinEnabled` | `Boolean` | When `false`, the SDK skips the PIN gate entirely |
+| `pinMessage` | `String` | Prompt shown on the PIN entry screen |
+| `maxAttempts` | `Int` | Maximum failed PIN attempts before lockout |
+| `getPinUrl` | `String` | URL opened when the user taps the "Get PIN" button (overrides the shortener flow if set) |
+| `getPinBtnText` | `String` | Label for the button that leads the user to obtain a PIN |
+| `enterPinBtnText` | `String` | Label for the PIN submission button |
+| `expiryMode` | `String` | `"never"` — PINs never expire; `"duration"` — PINs expire after `expiryHours` |
+| `expiryHours` | `Int` | Hours after use before a PIN expires (only applies when `expiryMode = "duration"`) |
+| `tutorialUrl` | `String` | Link to a tutorial shown on the PIN screen |
+| `pinInfoItems` | `Json` | Array of info items displayed on the PIN screen (icon, text, color) |
+| `joinLinks` | `Json` | Array of community/channel links shown on the PIN screen (name, description, url, iconType) |
+
+### UserPin
+
+A per-device PIN record. Generated by the shortener backend after a user completes the ad pages, then verified by the SDK. Each combination of `(apiKeyId, deviceId, pin)` is unique.
+
+```prisma
+model UserPin {
+  id        Int       @id @default(autoincrement())
+  apiKeyId  Int       @map("api_key_id")
+  deviceId  String    @map("device_id")
+  pin       String
+  isUsed    Boolean   @default(false) @map("is_used")
+  createdAt DateTime  @default(now()) @map("created_at")
+  usedAt    DateTime? @map("used_at")
+  expiresAt DateTime? @map("expires_at")
+
+  apiKey    ApiKey    @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@unique([apiKeyId, deviceId, pin])
+  @@index([apiKeyId, deviceId])
+  @@map("user_pins")
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `deviceId` | `String` | Android ID of the device the PIN was issued for |
+| `pin` | `String` | 6-digit numeric PIN |
+| `isUsed` | `Boolean` | `true` once the user has successfully entered the PIN |
+| `usedAt` | `DateTime?` | Timestamp of first successful use |
+| `expiresAt` | `DateTime?` | When the PIN expires; `null` means it never expires |
+
+### GlobalSettings
+
+A singleton record (always `id = 1`) that controls how PIN verification is shared across apps.
+
+```prisma
+model GlobalSettings {
+  id             Int      @id @default(1)
+  pinUnlockMode  String   @default("per_app") @map("pin_unlock_mode")
+  excludedAppIds Int[]    @default([]) @map("excluded_app_ids")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("global_settings")
+}
+```
+
+`pinUnlockMode` controls how the server evaluates whether a device is already verified:
+
+| Value | Behaviour |
+|---|---|
+| `per_app` | A device must verify separately for each app. Default behaviour. |
+| `global` | Verifying on any app unlocks all apps for that device. |
+| `global_except` | Like `global`, but apps listed in `excludedAppIds` still require their own PIN. |
+
+### Impression
+
+Records a single ad view event, written when the SDK calls `POST /api/sdk/impression`.
+
+```prisma
+model Impression {
+  id        Int      @id @default(autoincrement())
+  adId      Int      @map("ad_id")
+  apiKeyId  Int      @map("api_key_id")
+  deviceId  String   @default("") @map("device_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@map("impressions")
+}
+```
+
+### Click
+
+Records a single CTA tap event, written when the SDK calls `POST /api/sdk/click`.
+
+```prisma
+model Click {
+  id        Int      @id @default(autoincrement())
+  adId      Int      @map("ad_id")
+  apiKeyId  Int      @map("api_key_id")
+  deviceId  String   @default("") @map("device_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  ad        Ad       @relation(fields: [adId], references: [id], onDelete: Cascade)
+  apiKey    ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@map("clicks")
+}
+```
+
+## Database management
+
+### Apply schema changes
+
+During development, push schema changes directly to the database without creating migration files:
+
+```bash
+npm run db:push
+# equivalent to: prisma db push
+```
+
+For production, use tracked migration files:
+
+```bash
+npx prisma migrate dev --name describe-your-change   # generates + applies a migration file
+npx prisma migrate deploy                             # applies pending migrations in CI/CD
+```
+
+### Seed test data
+
+The seed script creates one demo `ApiKey` (with a random 32-char hex key), a default `PinConfig`, and one sample `interstitial` ad:
+
+```bash
+npm run db:seed
+# equivalent to: tsx prisma/seed.ts
+```
+
+Seed output:
+
+```
+Seed complete. API Key: a3f9c2e1b4d876503c2f...
+```
+
+<Tip>
+  Keep the printed API key — paste it into the `x-api-key` header when testing SDK endpoints with curl or Postman.
+</Tip>
+
+### Reset the database
+
+To wipe all data and re-apply the schema from scratch:
+
+```bash
+npx prisma migrate reset   # drops + recreates the database, re-runs migrations and seed
+```
+
+<Warning>
+  `prisma migrate reset` is destructive. Never run it against a production database.
+</Warning>
+
+### Inspect data with Prisma Studio
+
+Prisma Studio provides a visual table editor — useful for quickly inspecting or editing rows during development:
+
+```bash
+npm run db:studio
+# equivalent to: prisma studio
+```
+
+Opens at `http://localhost:5555` by default.

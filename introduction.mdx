@@ -1,0 +1,107 @@
+---
+title: "Introduction"
+description: "An Android SDK for ad monetization and device PIN verification, backed by an Express.js API server and Next.js admin dashboard."
+---
+
+# AdVerify SDK
+
+AdVerify is a complete ad monetization and device verification system for Android apps. It gives app developers a drop-in solution to gate app access behind a monetized PIN verification flow, serve interstitial ads, and track ad performance — all managed from a web-based admin panel.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your Android app integrated with AdVerify in minutes
+  </Card>
+  <Card title="Architecture" icon="diagram-project" href="/architecture">
+    Understand how the SDK, server, and admin panel work together
+  </Card>
+  <Card title="Android SDK" icon="android" href="/sdk/installation">
+    Install and configure the Android SDK in your app
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/sdk/init">
+    Explore the full REST API reference
+  </Card>
+</CardGroup>
+
+## What AdVerify does
+
+AdVerify lets you:
+
+1. **Require PIN verification** before users can access your app — forcing them through a monetized verification flow (view ads or articles to receive a PIN)
+2. **Serve interstitial ads** inside the app via a dialog-based ad system with zero external dependencies
+3. **Track impressions and clicks** on ads through the backend analytics
+4. **Manage everything** from a web-based admin panel
+
+## Key features
+
+<CardGroup cols={2}>
+  <Card title="PIN verification gate" icon="shield-check">
+    Control app access with device-bound PINs. Configure expiry as "never" or time-based (e.g. every 24 hours).
+  </Card>
+  <Card title="Interstitial ads" icon="rectangle-ad">
+    Serve image-based ads in a programmatic dialog with no external ad SDK required.
+  </Card>
+  <Card title="Ad analytics" icon="chart-bar">
+    Track every impression and click per device, per ad, and per app.
+  </Card>
+  <Card title="MT Manager support" icon="puzzle-piece">
+    Package the SDK as a DEX file for smali injection via MT Manager — no Android Studio required.
+  </Card>
+  <Card title="Admin dashboard" icon="gauge">
+    Manage API keys, ads, PIN configuration, and device verification records from a Next.js web panel.
+  </Card>
+  <Card title="Zero dependencies" icon="circle-check">
+    The Android SDK uses only standard Android APIs — Canvas, Paint, HttpURLConnection — with no third-party libraries.
+  </Card>
+</CardGroup>
+
+## How it works
+
+```
+App Launch
+    │
+    ▼
+SDK calls /api/sdk/init with deviceId
+    │
+    ├── pinEnabled=false OR pinVerified=true
+    │       → Fetch and show ads directly
+    │
+    └── pinEnabled=true AND pinVerified=false
+            → Show PIN Verification Dialog
+                │
+                ├── User clicks "Generate PIN & Verify"
+                │       → Server creates shortener link
+                │       → Browser opens (user views ads/articles)
+                │       → User receives PIN
+                │
+                └── User enters PIN → /api/sdk/verify-pin
+                        │
+                        ├── Valid → Dismiss dialog → Show ads
+                        └── Invalid → Show error + remaining attempts
+```
+
+## Tech stack
+
+| Component | Technology |
+|-----------|-----------|
+| Android SDK | Java, min API 21, zero dependencies |
+| Backend server | Express.js, TypeScript, Prisma ORM |
+| Database | PostgreSQL |
+| Admin panel | Next.js (App Router), TypeScript |
+| Verification flow | Shortener links via paidappstore.com API |
+
+## Getting started
+
+<Steps>
+  <Step title="Deploy the server">
+    Set up the Express.js backend with PostgreSQL. See [Server Installation](/server/installation).
+  </Step>
+  <Step title="Create an API key">
+    Log into the admin panel and create an API key for your app. See [API Keys](/admin/api-keys).
+  </Step>
+  <Step title="Install the Android SDK">
+    Add the SDK to your Android project and initialize it. See [SDK Installation](/sdk/installation).
+  </Step>
+  <Step title="Configure PIN and ads">
+    Set up PIN verification settings and create your first ad in the admin panel. See [PIN Config](/admin/pin-config) and [Ads](/admin/ads).
+  </Step>
+</Steps>

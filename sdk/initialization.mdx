@@ -1,0 +1,169 @@
+---
+title: "Initialization"
+description: "Initialize the SDK, display ads, and use the MT Manager single-call methods."
+---
+
+The `AdVerify` class is the sole public entry point for the SDK. All methods are static.
+
+## Standard Flow (Android Studio)
+
+The standard integration uses two calls: `init()` once at startup, then `show()` wherever you want the ad to appear.
+
+### `AdVerify.init()`
+
+```java
+public static void init(Context context, String apiKey, String baseUrl)
+```
+
+Initializes the SDK. Must be called before `show()`. Reads the device ID from `Settings.Secure.ANDROID_ID` and stores credentials for subsequent network calls.
+
+Throws `IllegalArgumentException` if `apiKey` or `baseUrl` is null or empty.
+
+<ParamField path="context" type="Context" required>
+  Any `Context` — typically your `Application` or `Activity` instance. Used only to read the device ID; no reference is retained.
+</ParamField>
+
+<ParamField path="apiKey" type="String" required>
+  Your API key from the AdVerify admin panel. Must not be null or empty.
+</ParamField>
+
+<ParamField path="baseUrl" type="String" required>
+  Base URL of your AdVerify server, e.g. `https://ads.example.com`. A trailing slash is stripped automatically.
+</ParamField>
+
+---
+
+### `AdVerify.show()`
+
+Two overloads are available:
+
+```java
+public static void show(Activity activity)
+public static void show(Activity activity, AdVerifyCallback callback)
+```
+
+Starts the full SDK flow: calls `/api/sdk/init` to check PIN status, optionally shows the PIN verification dialog, then fetches and displays an ad. Throws `IllegalStateException` if `init()` has not been called.
+
+<ParamField path="activity" type="Activity" required>
+  The currently visible activity. The SDK checks `activity.isFinishing()` before showing any dialog. Pass `null` or a finishing activity to receive an `onError` callback instead.
+</ParamField>
+
+<ParamField path="callback" type="AdVerifyCallback">
+  Optional. Receives lifecycle events (`onAdShown`, `onAdClosed`, `onAdClicked`, `onError`). Pass `null` to ignore events. See [Callbacks](/sdk/callbacks) for details.
+</ParamField>
+
+---
+
+## Where to Place the Calls
+
+<Tabs>
+  <Tab title="Application.onCreate (recommended)">
+    Call `init()` in your `Application` class so the SDK is ready before any activity starts:
+
+    ```java
+    public class MyApp extends Application {
+
+        @Override
+        public void onCreate() {
+            super.onCreate();
+            AdVerify.init(this, "YOUR_API_KEY", "https://ads.example.com");
+        }
+    }
+    ```
+
+    Then call `show()` inside the launcher activity:
+
+    ```java
+    public class MainActivity extends AppCompatActivity {
+
+        @Override
+        protected void onResume() {
+            super.onResume();
+            AdVerify.show(this, new AdVerifyCallback() {
+                @Override public void onAdShown() { /* dialog appeared */ }
+                @Override public void onAdClosed() { /* dialog dismissed */ }
+                @Override public void onAdClicked(String redirectUrl) { /* CTA tapped */ }
+                @Override public void onError(String message) { /* handle error */ }
+            });
+        }
+    }
+    ```
+  </Tab>
+  <Tab title="Activity.onCreate">
+    If you do not have a custom `Application` class, call `init()` before `show()` in the same activity:
+
+    ```java
+    public class MainActivity extends AppCompatActivity {
+
+        @Override
+        protected void onCreate(Bundle savedInstanceState) {
+            super.onCreate(savedInstanceState);
+            setContentView(R.layout.activity_main);
+
+            AdVerify.init(this, "YOUR_API_KEY", "https://ads.example.com");
+            AdVerify.show(this);
+        }
+    }
+    ```
+
+    `init()` is idempotent after the first call, so calling it every time `onCreate` runs is safe.
+  </Tab>
+</Tabs>
+
+---
+
+## MT Manager Methods
+
+These methods are designed for patching APKs with [MT Manager](/sdk/mt-manager) without an Android Studio project. Each method calls `init()` internally (if not already initialized) and then calls `show()`.
+
+### `AdVerify.start(Activity activity)`
+
+```java
+public static void start(Activity activity)
+```
+
+Reads `adverify.api_key` and `adverify.base_url` from `AndroidManifest.xml` `<meta-data>` tags, initializes the SDK, and shows the ad. Also sets `FLAG_SECURE` on the window to block screenshots and screen recording.
+
+**Smali (zero extra registers):**
+
+```smali
+invoke-static {p0}, Lcom/adverify/sdk/AdVerify;->start(Landroid/app/Activity;)V
+```
+
+<ParamField path="activity" type="Activity" required>
+  The launcher activity (`p0` / `this` in smali). The SDK reads `PackageManager` metadata from this activity's package name.
+</ParamField>
+
+---
+
+### `AdVerify.start(Activity activity, String apiKey, String baseUrl)`
+
+```java
+public static void start(Activity activity, String apiKey, String baseUrl)
+```
+
+Same as the zero-argument variant but accepts API credentials directly instead of reading from manifest metadata. Sets `FLAG_SECURE` on the window.
+
+**Smali (requires 2 string registers):**
+
+```smali
+const-string v0, "YOUR_API_KEY"
+const-string v1, "https://your-server.com"
+invoke-static {p0, v0, v1}, Lcom/adverify/sdk/AdVerify;->start(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;)V
+```
+
+<ParamField path="activity" type="Activity" required>
+  The launcher activity.
+</ParamField>
+
+<ParamField path="apiKey" type="String" required>
+  Your API key, passed as a `const-string` in smali.
+</ParamField>
+
+<ParamField path="baseUrl" type="String" required>
+  Your server base URL, passed as a `const-string` in smali.
+</ParamField>
+
+<Note>
+  Both `start()` overloads skip re-initialization if `init()` has already been called in the same process.
+</Note>

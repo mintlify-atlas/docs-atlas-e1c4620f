@@ -1,0 +1,200 @@
+---
+title: "PIN Verification Flow"
+description: "End-to-end walkthrough of how AdVerify gates app access behind a monetized PIN verification step."
+---
+
+The PIN verification flow is the core of AdVerify's monetization model. When enabled, the SDK requires each device to complete a PIN verification — which involves visiting an ad or article page through a shortener link — before the app becomes accessible. This page documents every step from SDK initialization through ad serving.
+
+## Flow Overview
+
+```
+App Launch
+    │
+    ▼
+SDK calls /api/sdk/init with deviceId
+    │
+    ├── pinEnabled=false OR pinVerified=true
+    │       → Fetch and show ads directly
+    │
+    └── pinEnabled=true AND pinVerified=false
+            → Show PIN Verification Dialog
+                │
+                ├── "Generate PIN & Verify" button
+                │       → Server creates shortener link
+                │       → Opens browser (user views articles/ads)
+                │       → User receives PIN
+                │       → Dialog switches to PIN entry state
+                │
+                ├── "Tutorial" button → Opens tutorial URL
+                ├── "Join Us" button → Shows community links dialog
+                └── "Exit" button → Closes app
+                │
+                ▼
+            User enters PIN → /api/sdk/verify-pin
+                │
+                ├── Valid → Dismiss dialog → Show ads
+                └── Invalid → Show error + remaining attempts
+```
+
+## Step-by-Step Walkthrough
+
+<Steps>
+  <Step title="SDK Initialization">
+    When your app starts, call `AdVerify.init()` (or `AdVerify.start()` for MT Manager). The SDK reads `Settings.Secure.ANDROID_ID` as the device identifier, then calls `POST /api/sdk/init`.
+
+    ```java
+    // Standard Android Studio usage
+    AdVerify.init(context, "YOUR_API_KEY", "https://your-server.com");
+    AdVerify.show(activity);
+
+    // MT Manager single-call usage (reads meta-data from AndroidManifest)
+    AdVerify.start(activity);
+    ```
+
+    The request body sent to the server:
+
+    ```json
+    {
+      "deviceId": "a1b2c3d4e5f6a1b2"
+    }
+    ```
+
+    The `x-api-key` header is required on every request. The `sdkAuth` middleware on the server validates the key against the `ApiKey` table and rejects inactive or missing keys with a `401` or `403`.
+  </Step>
+
+  <Step title="Server Init Response">
+    The server queries `PinConfig` for the API key and checks `UserPin` for an existing verified PIN on this device. It returns:
+
+    ```json
+    {
+      "appName": "MyApp",
+      "pinEnabled": true,
+      "pinVerified": false,
+      "pinMessage": "Verify your device to continue",
+      "maxAttempts": 5,
+      "getPinBtnText": "Generate PIN & Verify",
+      "enterPinBtnText": "Enter PIN",
+      "tutorialUrl": "https://example.com/tutorial",
+      "pinInfoItems": [
+        { "icon": "device", "text": "Device Not Registered", "color": "#3b82f6" },
+        { "icon": "hourglass", "text": "Access Duration: 24 Hours", "color": "#22c55e" },
+        { "icon": "key", "text": "Automatic Password System", "color": "#8b5cf6" },
+        { "icon": "crown", "text": "Premium Users Only", "color": "#eab308" },
+        { "icon": "shield", "text": "VPN & Emulators Not Allowed", "color": "#ef4444" }
+      ],
+      "joinLinks": [
+        { "name": "Public Channel", "description": "Apps, APKs & Mods", "url": "https://t.me/Android_apps_apks_mod", "iconType": "channel" },
+        { "name": "Private Channel", "description": "Exclusive Content", "url": "https://t.me/...", "iconType": "telegram" }
+      ]
+    }
+    ```
+
+    If `pinEnabled` is `false`, or `pinVerified` is `true`, the SDK skips the dialog entirely and proceeds straight to fetching ads.
+  </Step>
+
+  <Step title="PIN Dialog Appears">
+    When `pinEnabled=true` AND `pinVerified=false`, `AdLoader` calls `showPinDialog()` and the `PinVerifyDialog` is displayed. The dialog is fully programmatic — no XML layouts or external libraries.
+
+    **State 1 — Info screen** shows:
+    - App name and `pinMessage` from the server
+    - Info cards with Canvas-drawn icons (device, hourglass, key, crown, shield) and their colored dot indicators
+    - Four action buttons: Get PIN, Tutorial, Join Us, Exit
+
+    The SDK falls back to hardcoded default info items and join links if the server returns empty arrays.
+
+    | Icon value | Drawing | Default color |
+    |---|---|---|
+    | `device` / `info` | Phone with signal waves | `#3b82f6` (blue) |
+    | `clock` / `hourglass` | Hourglass with sand | `#22c55e` (green) |
+    | `key` / `sparkle` | Key with sparkle | `#8b5cf6` (violet) |
+    | `star` / `crown` | Crown with gems | `#eab308` (amber) |
+    | `warning` / `shield-x` | Shield with X | `#ef4444` (red) |
+  </Step>
+
+  <Step title="Generate PIN">
+    When the user taps the "Get PIN" button (label comes from `getPinBtnText`), the SDK calls `POST /api/sdk/create-link`.
+
+    ```json
+    // Request body
+    { "deviceId": "a1b2c3d4e5f6a1b2" }
+
+    // Response
+    { "url": "https://paidappstore.com/verify/abc123" }
+    ```
+
+    The server calls the shortener API to create a verification link that embeds the `apiKey` and `deviceId`. The SDK opens this URL in the system browser via `Intent.ACTION_VIEW`.
+
+    The user views the ad or article page. When they complete it, the shortener backend calls `POST /api/sdk/generate-pin` (authenticated with `SHORTENER_SECRET`), which generates a unique 6-digit PIN and stores it in the `UserPin` table bound to that `deviceId`.
+
+    After the browser opens, the dialog automatically switches to PIN entry state.
+  </Step>
+
+  <Step title="PIN Entry">
+    The dialog transitions to **State 2** — a PIN input field with the `enterPinBtnText` button (default: "Enter PIN"). The user types the 6-digit PIN they received and taps Verify.
+
+    The SDK calls `POST /api/sdk/verify-pin`:
+
+    ```json
+    // Request body
+    {
+      "pin": "482917",
+      "deviceId": "a1b2c3d4e5f6a1b2"
+    }
+    ```
+
+    The server looks up a `UserPin` record matching `{ apiKeyId, deviceId, pin, isUsed: false }`. If not found, it returns `{ verified: false, message: "Invalid PIN" }`.
+  </Step>
+
+  <Step title="Verification Outcome">
+    **Success (`verified: true`):**
+    - The `UserPin` record is updated: `isUsed=true`, `usedAt=now()`
+    - If `expiryMode=duration`, `expiresAt` is set to `now() + expiryHours * 3600 * 1000`
+    - If `expiryMode=never`, `expiresAt` stays `null`
+    - The dialog is dismissed
+    - The SDK proceeds to fetch and show ads
+
+    **Failure (`verified: false`):**
+    - The dialog calls `showError("Invalid PIN. Try again.")`
+    - The attempt counter increments inside the dialog
+    - When the attempt count reaches `maxAttempts`, the `PinVerifyDialog.PinListener.onMaxAttemptsReached()` callback fires, which in turn calls `AdVerifyCallback.onError("Max PIN attempts reached")`
+
+    <Warning>
+      Once `maxAttempts` is exhausted the error callback fires but the dialog does not close automatically — handle this in your `AdVerifyCallback.onError()` implementation if you need to take action (e.g. finish the activity).
+    </Warning>
+  </Step>
+
+  <Step title="Ad Serving">
+    After the PIN dialog is dismissed (or if verification was not needed), `AdLoader` calls `GET /api/sdk/ads`. The server returns all active ads for the API key, ordered by `priority DESC`.
+
+    The SDK picks `ads[0]` — the highest-priority ad — and:
+
+    1. Calls `POST /api/sdk/impression` immediately when the dialog opens
+    2. Shows `AdDialog` with the ad image loaded via `HttpURLConnection`
+    3. Calls `POST /api/sdk/click` if the user taps the CTA button, then fires `AdVerifyCallback.onAdClicked(redirectUrl)`
+    4. Fires `AdVerifyCallback.onAdClosed()` when the dialog is dismissed
+
+    ```java
+    AdVerify.show(activity, new AdVerifyCallback() {
+        @Override public void onAdShown() { /* dialog is visible */ }
+        @Override public void onAdClosed() { /* user dismissed the ad */ }
+        @Override public void onAdClicked(String redirectUrl) { /* CTA tapped */ }
+        @Override public void onError(String message) { /* init/PIN/ad error */ }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Error Handling
+
+| Scenario | Callback / Behavior |
+|---|---|
+| SDK not initialized | `IllegalStateException` thrown synchronously |
+| Network error on init | `AdVerifyCallback.onError(message)` |
+| Invalid/inactive API key | Server returns `403`, triggers `onError` |
+| Invalid PIN | Dialog shows inline error, attempts counted |
+| Max attempts reached | `AdVerifyCallback.onError("Max PIN attempts reached")` |
+| No ads available | `AdVerifyCallback.onError("No ads available")` |
+
+<Note>
+  All HTTP calls in the SDK run on a background thread. Callbacks that touch the UI (`showError`, `dismiss`, etc.) are posted back to the main thread via `Activity.runOnUiThread()`.
+</Note>

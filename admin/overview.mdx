@@ -1,0 +1,72 @@
+---
+title: "Admin panel overview"
+description: "A Next.js web app for managing every aspect of AdVerify: API keys, ads, PIN configuration, user PINs, and global settings."
+---
+
+The AdVerify admin panel is a Next.js application that gives you full control over the platform. It communicates directly with the `/api/admin/*` server routes using HTTP Basic auth and provides a visual interface for all management tasks.
+
+## Logging in
+
+Open the panel URL in your browser. You are prompted for a username and password that correspond to the `ADMIN_USERNAME` and `ADMIN_PASSWORD` environment variables set on your server. All subsequent requests carry those credentials automatically.
+
+<Note>
+The session is stored in memory. Refreshing the page requires you to re-enter credentials unless your browser has saved them.
+</Note>
+
+## Panel sections
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="chart-bar">
+    At-a-glance stats for the entire platform: API key count, ad count, total and today's impressions, clicks, CTR, and a dedicated PIN analytics section.
+  </Card>
+  <Card title="API Keys" icon="key">
+    Create, view, enable, disable, and delete API keys. Each key ties a registered app (identified by `appName` and `packageName`) to all associated ads and PIN configuration.
+  </Card>
+  <Card title="Ads" icon="megaphone">
+    Manage ads across all apps. Create ads with a title, description, image, redirect URL, ad type, button text, and priority. Enable or disable individual ads at any time.
+  </Card>
+  <Card title="PIN Config" icon="shield">
+    Configure PIN verification per app. Toggle PIN enforcement, set the PIN message and button labels, define max attempts, and choose between never-expiring and time-based expiry.
+  </Card>
+  <Card title="User PINs" icon="lock">
+    View all device PINs across every app. Filter by app or date, inspect PIN status, expire an active PIN, or revoke all PINs for a specific device.
+  </Card>
+  <Card title="MT Manager" icon="wrench">
+    Step-by-step guide for patching any APK with the AdVerify SDK using MT Manager, including downloadable DEX file and auto-generated manifest and smali snippets.
+  </Card>
+  <Card title="Settings" icon="sliders">
+    Global PIN unlock mode: choose between per-app isolation, global single-verification, or global mode with per-app exclusions.
+  </Card>
+</CardGroup>
+
+## Dashboard metrics
+
+The dashboard loads two API calls on mount:
+
+- `GET /api/admin/stats` — platform-wide counters
+- `GET /api/admin/user-pins/stats` — PIN activity for today and yesterday
+
+### Platform stats
+
+| Metric | Description |
+|---|---|
+| API Keys | Total number of registered API keys |
+| Total Ads | Total ads across all apps |
+| Total PINs | All-time PIN records in the database |
+| Used PINs | PINs that have been verified at least once |
+| Impressions | All-time ad impressions |
+| Today Impr. | Impressions recorded today (UTC) |
+| Total Clicks | All-time ad clicks |
+| Today Clicks | Clicks recorded today (UTC) |
+| CTR | Click-through rate: `(total clicks / total impressions) × 100` |
+
+### PIN analytics
+
+| Metric | Description |
+|---|---|
+| PINs Today | PINs generated on the current day |
+| Used Today | PINs verified on the current day |
+| PINs Yesterday | PINs generated on the previous day |
+| Used Yesterday | PINs verified on the previous day |
+| Active PINs | PINs that are verified and not yet expired |
+| Expired PINs | PINs that have passed their `expiresAt` timestamp |

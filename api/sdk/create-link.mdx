@@ -1,0 +1,55 @@
+---
+title: "POST /api/sdk/create-link"
+description: "Generate a shortener URL that the user opens to earn their PIN"
+---
+
+Creates a verification link via the configured shortener service and returns the URL. The user opens this URL in a browser, completes the required ad pages, and receives their PIN. Once the user finishes, the shortener backend calls `/api/sdk/generate-pin` internally to issue the PIN, which the user can then submit to `/api/sdk/verify-pin`.
+
+## Authentication
+
+This endpoint requires a valid API key passed in the `x-api-key` header.
+
+## Request
+
+### Headers
+
+<ParamField header="x-api-key" type="string" required>
+  Your application's API key.
+</ParamField>
+
+<ParamField header="Content-Type" type="string" required>
+  Must be `application/json`.
+</ParamField>
+
+### Body
+
+<ParamField body="deviceId" type="string" required>
+  The unique identifier for the device. This value is embedded in the link so the shortener can associate the completed session with the correct device when generating the PIN.
+</ParamField>
+
+## Response
+
+<ResponseField name="url" type="string">
+  The full shortener URL the user should open to begin the PIN acquisition flow (e.g. `https://verify.example.com/verify/abc123`).
+</ResponseField>
+
+<Warning>
+  If the shortener API is unreachable or returns an error, the endpoint responds with HTTP `500` and `{ "error": "Failed to create link" }`.
+</Warning>
+
+## Example Request
+
+```bash
+curl -X POST https://your-server.com/api/sdk/create-link \
+  -H "x-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"deviceId": "a1b2c3d4e5f6"}'
+```
+
+## Example Response
+
+```json
+{
+  "url": "https://verify.example.com/verify/abc123"
+}
+```

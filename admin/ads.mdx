@@ -1,0 +1,92 @@
+---
+title: "Ads"
+description: "Create and manage ads served to Android devices, including ad type, priority, and enable/disable controls."
+---
+
+Ads are the primary content delivered by the SDK. Each ad belongs to one API key (app) and is served to devices when they call `/api/sdk/ads`. The server returns the active ad with the highest `priority` value for the requesting app.
+
+## Creating an ad
+
+1. Navigate to **Ads** in the sidebar.
+2. Click **New Ad**.
+3. Select the target app from the **App** dropdown.
+4. Fill in the remaining fields and click **Create Ad**.
+
+## Ad fields
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `id` | `Int` | — | auto | Auto-incremented primary key |
+| `apiKeyId` | `Int` | Yes | — | ID of the API key (app) this ad belongs to |
+| `title` | `String` | Yes | — | Headline displayed on the ad |
+| `description` | `String` | No | `""` | Body text shown below the title |
+| `imageUrl` | `String` | No | `""` | URL of the ad image |
+| `redirectUrl` | `String` | No | `""` | URL opened when the user taps the action button |
+| `adType` | `String` | No | `"interstitial"` | Presentation style: `interstitial`, `banner`, or `dialog` |
+| `buttonText` | `String` | No | `"Visit Now"` | Label on the call-to-action button |
+| `priority` | `Int` | No | `0` | Determines which ad is shown first; higher wins |
+| `isActive` | `Boolean` | — | `true` | Whether this ad is eligible to be served |
+| `createdAt` | `DateTime` | — | now | Timestamp of ad creation |
+
+## Ad types
+
+<Tabs>
+  <Tab title="Interstitial">
+    A full-screen overlay that blocks the app until the user interacts with it. Best for high-value promotions. This is the default type.
+
+    ```json
+    { "adType": "interstitial" }
+    ```
+  </Tab>
+  <Tab title="Banner">
+    A compact strip displayed at the edge of the screen. Less intrusive than an interstitial; suitable for persistent visibility.
+
+    ```json
+    { "adType": "banner" }
+    ```
+  </Tab>
+  <Tab title="Dialog">
+    A modal dialog with a title, description, image, and button. Similar to an interstitial but rendered as a dismissible dialog rather than a full-screen view.
+
+    ```json
+    { "adType": "dialog" }
+    ```
+  </Tab>
+</Tabs>
+
+## Priority
+
+When the SDK requests an ad, the server selects the **active ad with the highest `priority` value** for the calling app. Ads with equal priority are ordered by creation time.
+
+- Set `priority` to `1`–`10` in the creation form (the panel enforces this range).
+- A value of `0` is allowed via the API and will lose to any ad with a higher value.
+- Use higher priority for time-sensitive promotions and lower priority for evergreen ads.
+
+<Tip>
+Set the priority of an ad to `0` rather than disabling it when you want it to remain in rotation but not take precedence over others.
+</Tip>
+
+## Enabling and disabling ads
+
+Click **Disable** on any active ad to set `isActive` to `false`. The server will no longer serve that ad to any device. Click **Enable** to restore it.
+
+## Deleting an ad
+
+Click **Delete** and confirm. All impression and click records linked to the ad are permanently removed.
+
+<Warning>
+Deleting an ad removes all associated impression and click analytics permanently. Disable the ad instead if you may need the data later.
+</Warning>
+
+## Ads table columns
+
+The **Ads** page shows these columns for each ad:
+
+| Column | Source |
+|---|---|
+| Title | `ad.title` |
+| App | `ad.apiKey.appName` |
+| Type | `ad.adType` |
+| Impressions | `ad._count.impressions` |
+| Clicks | `ad._count.clicks` |
+| Status | `ad.isActive` |

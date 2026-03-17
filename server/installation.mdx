@@ -1,0 +1,176 @@
+---
+title: "Installation"
+description: "How to clone, install dependencies, migrate the database, and start the AdVerify server."
+---
+
+<Steps>
+  <Step title="Prerequisites">
+    Make sure the following are installed before you begin:
+
+    - **Node.js 20+** — [nodejs.org](https://nodejs.org)
+    - **PostgreSQL 14+** — running locally or via a managed service (Supabase, Railway, Neon, etc.)
+    - **tsx** — used to run TypeScript directly; installed automatically as a dev dependency
+    - **Bun** *(optional)* — can be used in place of `npm` for faster installs and script execution
+
+    Confirm your versions:
+
+    ```bash
+    node -v    # >= 20.0.0
+    psql --version
+    ```
+  </Step>
+
+  <Step title="Get the server source">
+    The server lives in the `server/` directory of the AdVerify monorepo. If you are working from a fresh clone:
+
+    ```bash
+    git clone https://github.com/your-org/adverify.git
+    cd adverify/server
+    ```
+
+    Or, if you only need the server:
+
+    ```bash
+    git clone --filter=blob:none --sparse https://github.com/your-org/adverify.git
+    cd adverify
+    git sparse-checkout set server
+    cd server
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+
+    Or with Bun:
+
+    ```bash
+    bun install
+    ```
+
+    Key production dependencies installed:
+
+    | Package | Version | Purpose |
+    |---|---|---|
+    | `express` | ^4.21 | HTTP framework |
+    | `@prisma/client` | ^6.0 | Database ORM |
+    | `zod` | ^3.23 | Request validation |
+    | `cors` | ^2.8 | CORS middleware |
+    | `dotenv` | ^17.3 | Env variable loading |
+    | `multer` | ^2.1 | APK file upload handling |
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the `server/` directory:
+
+    ```bash
+    cp .env.example .env   # if an example file exists, otherwise create it manually
+    ```
+
+    Minimum required configuration:
+
+    ```env
+    # Required — your PostgreSQL connection string
+    DATABASE_URL="postgresql://user:password@localhost:5432/adverify"
+
+    # Admin dashboard credentials
+    ADMIN_USERNAME="admin"
+    ADMIN_PASSWORD="change-me-in-production"
+
+    # Port the server listens on (default: 3042)
+    PORT=3042
+
+    # Frontend dashboard URL (used for CORS)
+    FRONTEND_URL="http://localhost:3000"
+    ```
+
+    See [Configuration](/server/configuration) for the full list of environment variables.
+
+    <Warning>
+      Never use the default `ADMIN_PASSWORD="admin123"` in production. Set a strong, unique password before deploying.
+    </Warning>
+  </Step>
+
+  <Step title="Push the database schema">
+    Apply the Prisma schema to your PostgreSQL database. This creates all tables without generating a migration file:
+
+    ```bash
+    npm run db:push
+    ```
+
+    Which runs:
+
+    ```bash
+    prisma db push
+    ```
+
+    <Note>
+      For production deployments, prefer `prisma migrate deploy` with tracked migration files to ensure schema changes are applied safely and reproducibly.
+    </Note>
+  </Step>
+
+  <Step title="Seed initial data">
+    Populate the database with a demo API key, a sample PIN config, and a sample ad:
+
+    ```bash
+    npm run db:seed
+    ```
+
+    Which runs:
+
+    ```bash
+    tsx prisma/seed.ts
+    ```
+
+    On success the seed script prints the generated API key:
+
+    ```
+    Seed complete. API Key: a3f9c2e1b4d87650...
+    ```
+
+    Copy this key — you will use it as the `x-api-key` header when testing SDK endpoints.
+  </Step>
+
+  <Step title="Start the server">
+    **Development** (with hot-reload via `tsx watch`):
+
+    ```bash
+    npm run dev
+    ```
+
+    **Production** (compile first, then run the compiled output):
+
+    ```bash
+    npm run build
+    npm start
+    ```
+
+    The available npm scripts are:
+
+    | Script | Command | Description |
+    |---|---|---|
+    | `dev` | `tsx watch src/app.ts` | Start with hot-reload |
+    | `build` | `tsc` | Compile TypeScript to `dist/` |
+    | `start` | `node dist/app.js` | Run compiled production build |
+    | `db:push` | `prisma db push` | Sync schema to database |
+    | `db:seed` | `tsx prisma/seed.ts` | Seed demo data |
+    | `db:studio` | `prisma studio` | Open Prisma visual editor |
+
+    Once running, confirm the server is healthy:
+
+    ```bash
+    curl http://localhost:3042/api/health
+    ```
+
+    Expected response:
+
+    ```json
+    {
+      "status": "ok",
+      "uptime": 3.142,
+      "timestamp": "2026-03-17T10:00:00.000Z"
+    }
+    ```
+  </Step>
+</Steps>
