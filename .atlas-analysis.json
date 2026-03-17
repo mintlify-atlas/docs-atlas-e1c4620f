@@ -1,0 +1,121 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "AdVerify SDK",
+  "projectDescription": "An Android SDK for ad monetization and device PIN verification, backed by an Express.js API server and a Next.js admin dashboard.",
+  "theme": "sequoia",
+  "primaryColor": "#3b82f6",
+  "lightColor": "#eff6ff",
+  "darkColor": "#1e3a8a",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "architecture"
+            ]
+          },
+          {
+            "group": "Android SDK",
+            "pages": [
+              "sdk/installation",
+              "sdk/initialization",
+              "sdk/callbacks",
+              "sdk/mt-manager",
+              "sdk/dialogs"
+            ]
+          },
+          {
+            "group": "Server Setup",
+            "pages": [
+              "server/overview",
+              "server/installation",
+              "server/configuration",
+              "server/database"
+            ]
+          },
+          {
+            "group": "Admin Panel",
+            "pages": [
+              "admin/overview",
+              "admin/api-keys",
+              "admin/ads",
+              "admin/pin-config",
+              "admin/user-pins",
+              "admin/settings"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/pin-verification-flow",
+              "guides/ad-monetization",
+              "guides/expiry-modes",
+              "guides/security"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "SDK Endpoints",
+            "pages": [
+              "api/sdk/init",
+              "api/sdk/verify-pin",
+              "api/sdk/create-link",
+              "api/sdk/ads",
+              "api/sdk/impression",
+              "api/sdk/click"
+            ]
+          },
+          {
+            "group": "Admin Endpoints",
+            "pages": [
+              "api/admin/stats",
+              "api/admin/keys",
+              "api/admin/ads",
+              "api/admin/pin-config",
+              "api/admin/user-pins",
+              "api/admin/settings"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "PIN verification gate before app access with configurable expiry modes (never or duration-based)",
+    "Interstitial ad serving via programmatic Android dialogs with zero external dependencies",
+    "Impression and click tracking for ad analytics",
+    "MT Manager / Smali injection support via DEX packaging",
+    "Admin dashboard for managing API keys, ads, PIN configuration, and device verification records",
+    "Device-bound PIN generation via shortener link flow",
+    "Community links dialog (JoinDialog) with Telegram and channel integration",
+    "Canvas-drawn UI icons — no image assets required"
+  ],
+  "publicApiSurface": [
+    "AdVerify.init(Context, String apiKey, String baseUrl)",
+    "AdVerify.show(Activity)",
+    "AdVerify.show(Activity, AdVerifyCallback)",
+    "AdVerify.start(Activity)",
+    "AdVerify.start(Activity, String apiKey, String baseUrl)",
+    "AdVerifyCallback.onAdShown()",
+    "AdVerifyCallback.onAdClosed()",
+    "AdVerifyCallback.onAdClicked(String redirectUrl)",
+    "AdVerifyCallback.onError(String message)",
+    "POST /api/sdk/init",
+    "POST /api/sdk/verify-pin",
+    "POST /api/sdk/create-link",
+    "GET /api/sdk/ads",
+    "POST /api/sdk/impression",
+    "POST /api/sdk/click",
+    "POST /api/sdk/generate-pin",
+    "POST /api/sdk/check-status"
+  ]
+}
